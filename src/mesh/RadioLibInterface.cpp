@@ -1,6 +1,7 @@
 #include "RadioLibInterface.h"
 #include "MeshTypes.h"
 #include "NodeDB.h"
+#include "Channels.h"
 #include "PowerMon.h"
 #include "SPILock.h"
 #include "Throttle.h"
@@ -439,6 +440,39 @@ void RadioLibInterface::handleReceiveInterrupt()
             printPacket("Lora RX", mp);
 
             airTime->logAirtime(RX_LOG, xmitMsec);
+
+// JM mod start
+            LOG_INFO("handleReceiveInterrupt : Message recieved: channel hash %d from %d to %d and a hop_start of %d and a hop_limit of %d", mp->channel, mp->from, mp->to, mp->hop_start, mp->hop_limit);
+            if(mp->hop_start > HOP_RELIABLE &&
+               (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY ||
+                config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY)) {
+                if(isToUs(mp)){
+                    LOG_INFO("handleReceiveInterrupt : Message is for us, so we keep it.");
+                } else {
+                    // Try to find a known channel and check if it is not the default channel
+                    ChannelIndex chIndex = 0;
+                    bool unkwnownChannel = true;
+                    for (chIndex = 0; chIndex < channels.getNumChannels(); chIndex++) {
+                        // LOG_INFO("handleReceiveInterrupt : Test channel index %d for hash %d", chIndex, mp->channel);
+                        if (channels.decryptForHash(chIndex, mp->channel)) {
+                            LOG_INFO("handleReceiveInterrupt : Found channel index %d for hash %d", chIndex, mp->channel);
+                            if(channels.isDefaultChannel(chIndex)) {
+                                LOG_WARN("Drop message with hop_start of %d (> than %d)! (This node is in LOCAL or KNOWN ONLY mode. Message is not directly for us on default channel.)", mp->hop_start, HOP_RELIABLE);
+                                return;
+                            } else {
+                                LOG_INFO("handleReceiveInterrupt : Message recieved on non default channel %d from %d to %d and a hop_start of %d and a hop_limit of %d, but we keep it.", chIndex, mp->from, mp->to, mp->hop_start, mp->hop_limit);
+                                unkwnownChannel = false;
+                            }
+                            break;
+                        }
+                    }
+                    if(unkwnownChannel) {
+                        LOG_WARN("Drop message with hop_start of %d (> than %d)! (This node is in LOCAL or KNOWN ONLY mode. Message is not directly for us with channel hash %d.)", mp->hop_start, HOP_RELIABLE, mp->channel);
+                        return;
+                    }
+                }
+            }
+// JM mod end
 
             deliverToReceiver(mp);
         }

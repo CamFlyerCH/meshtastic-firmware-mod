@@ -235,6 +235,24 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         }
     }
 
+// JM mod start
+    LOG_INFO("JM Mod: Going to send a message with PortNum %d on channel %d .", p->decoded.portnum, p->channel);
+    if (isFromUs(p) && channels.isDefaultChannel(p->channel) &&
+        (p->decoded.portnum == meshtastic_PortNum_AUDIO_APP ||              //   9
+        p->decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP ||    //  10
+        p->decoded.portnum == meshtastic_PortNum_PAXCOUNTER_APP ||          //  34
+        p->decoded.portnum == meshtastic_PortNum_SERIAL_APP ||              //  64
+        p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||          //  66
+        p->decoded.portnum == meshtastic_PortNum_TELEMETRY_APP ||           //  67
+        p->decoded.portnum == meshtastic_PortNum_ZPS_APP ||                 //  68
+        p->decoded.portnum == meshtastic_PortNum_NEIGHBORINFO_APP ||        //  71
+        p->decoded.portnum == meshtastic_PortNum_POWERSTRESS_APP ||         //  74
+        p->decoded.portnum == meshtastic_PortNum_PRIVATE_APP)) {            // 256
+        p->hop_limit = 0;
+        LOG_WARN("Changed hop_limit to 0 because the message type %d should not be flood routed on a default channel !", p->decoded.portnum);
+    }
+// JM mod end
+
     // PacketId nakId = p->decoded.which_ackVariant == SubPacket_fail_id_tag ? p->decoded.ackVariant.fail_id : 0;
     // assert(!nakId); // I don't think we ever send 0hop naks over the wire (other than to the phone), test that assumption with
     // assert
