@@ -442,7 +442,7 @@ void RadioLibInterface::handleReceiveInterrupt()
             airTime->logAirtime(RX_LOG, xmitMsec);
 
 // JM mod start
-            LOG_INFO("handleReceiveInterrupt : Message recieved: channel hash %d from %d to %d and a hop_start of %d and a hop_limit of %d", mp->channel, mp->from, mp->to, mp->hop_start, mp->hop_limit);
+            LOG_INFO("handleReceiveInterrupt : Message recieved: channel hash %d from %d to %d and a hop_start of %d and a hop_limit of %d . Free heap = %i", mp->channel, mp->from, mp->to, mp->hop_start, mp->hop_limit, memGet.getFreeHeap());
             if(mp->hop_start > HOP_RELIABLE &&
                (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY ||
                 config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY)) {
@@ -458,6 +458,7 @@ void RadioLibInterface::handleReceiveInterrupt()
                             LOG_INFO("handleReceiveInterrupt : Found channel index %d for hash %d", chIndex, mp->channel);
                             if(channels.isDefaultChannel(chIndex)) {
                                 LOG_WARN("Drop message with hop_start of %d (> than %d)! (This node is in LOCAL or KNOWN ONLY mode. Message is not directly for us on default channel.)", mp->hop_start, HOP_RELIABLE);
+                                packetPool.release(mp);
                                 return;
                             } else {
                                 LOG_INFO("handleReceiveInterrupt : Message recieved on non default channel %d from %d to %d and a hop_start of %d and a hop_limit of %d, but we keep it.", chIndex, mp->from, mp->to, mp->hop_start, mp->hop_limit);
@@ -468,6 +469,7 @@ void RadioLibInterface::handleReceiveInterrupt()
                     }
                     if(unkwnownChannel) {
                         LOG_WARN("Drop message with hop_start of %d (> than %d)! (This node is in LOCAL or KNOWN ONLY mode. Message is not directly for us with channel hash %d.)", mp->hop_start, HOP_RELIABLE, mp->channel);
+                        packetPool.release(mp);
                         return;
                     }
                 }
