@@ -445,7 +445,7 @@ void RadioLibInterface::handleReceiveInterrupt()
             airTime->logAirtime(RX_LOG, xmitMsec);
 
 // JM mod start
-            LOG_INFO("handleReceiveInterrupt : Message recieved: channel hash %d from %d to %d and a hop_start of %d and a hop_limit of %d . Free heap = %i", mp->channel, mp->from, mp->to, mp->hop_start, mp->hop_limit, memGet.getFreeHeap());
+            LOG_INFO("handleReceiveInterrupt: Message recieved: channel hash %d from %d to %d and a hop_start of %d and a hop_limit of %d . Free heap = %i", mp->channel, mp->from, mp->to, mp->hop_start, mp->hop_limit, memGet.getFreeHeap());
             if(mp->hop_start > HOP_RELIABLE &&
                (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY ||
                 config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY)) {
