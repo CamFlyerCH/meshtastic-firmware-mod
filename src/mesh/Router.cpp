@@ -603,12 +603,73 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
         else
             printPacket("handleReceived(REMOTE)", p);
 
+// JM mod start
+        LOG_INFO("handleReceived: Message type %d from !%x to !%x and a hop_start of %d and a hop_limit of %d on channel hash %i", p->decoded.portnum, p->from, p->to, p->hop_start, p->hop_limit, p->channel);
+        LOG_INFO("RXDATA,%d,!%x,!%x,%d,%d,%i", p->decoded.portnum, p->from, p->to, p->hop_start, p->hop_limit, p->channel);
+        bool sendcanceled = false;
+        if(p->hop_start > HOP_RELIABLE &&
+            (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY ||
+            config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY)) {
+            if(isToUs(p)){
+                LOG_INFO("handleReceived: Message is for us, so we keep it.");
+            } else {
+                // Try to find a known channel and check if it is not the default channel
+                ChannelIndex chIndex = 0;
+                bool unkwnownChannel = true;
+                for (chIndex = 0; chIndex < channels.getNumChannels(); chIndex++) {
+                    // LOG_INFO("handleReceiveInterrupt : Test channel index %d for hash %d", chIndex, mp->channel);
+                    if (channels.decryptForHash(chIndex, p->channel)) {
+                        LOG_INFO("handleReceived: Found channel index %d for hash %d", chIndex, p->channel);
+                        if(channels.isDefaultChannel(chIndex)) {
+                            LOG_WARN("Drop message with hop_start of %d (> than %d)! (This node is in LOCAL or KNOWN ONLY mode. Message is not directly for us on default channel.)", p->hop_start, HOP_RELIABLE);
+                            cancelSending(p->from, p->id);
+                            sendcanceled = true;
+                            skipHandle = true;
+                        } else {
+                            LOG_INFO("handleReceived: Message recieved on non default channel %d from !%x to !%x and a hop_start of %d and a hop_limit of %d, but we keep it.", chIndex, p->from, p->to, p->hop_start, p->hop_limit);
+                            unkwnownChannel = false;
+                        }
+                        break;
+                    }
+                }
+                if(unkwnownChannel) {
+                    LOG_WARN("Drop message with hop_start of %d (> than %d)! (This node is in LOCAL or KNOWN ONLY mode. Message is not directly for us with channel hash %d.)", p->hop_start, HOP_RELIABLE, p->channel);
+                    if(!sendcanceled){
+                        cancelSending(p->from, p->id);
+                        sendcanceled = true;
+                    }
+                    skipHandle = true;
+                }
+            }
+        }
+
+        if ((config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY 
+            || config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY) 
+            && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+            IS_ONE_OF(p->decoded.portnum, meshtastic_PortNum_ATAK_FORWARDER, meshtastic_PortNum_ATAK_PLUGIN,
+                      meshtastic_PortNum_PAXCOUNTER_APP, meshtastic_PortNum_IP_TUNNEL_APP, meshtastic_PortNum_AUDIO_APP,
+                      meshtastic_PortNum_PRIVATE_APP, meshtastic_PortNum_DETECTION_SENSOR_APP, meshtastic_PortNum_RANGE_TEST_APP,
+                      meshtastic_PortNum_REMOTE_HARDWARE_APP, meshtastic_PortNum_TELEMETRY_APP, meshtastic_PortNum_NEIGHBORINFO_APP)) {
+            LOG_WARN("Don't retransmit messages with portnum %d.", p->decoded.portnum);
+            if(!sendcanceled){
+                cancelSending(p->from, p->id);
+                sendcanceled = true;
+            }
+            // skipHandle = true;
+        }
+// JM mod end
+
+
+
         // Neighbor info module is disabled, ignore expensive neighbor info packets
         if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
             p->decoded.portnum == meshtastic_PortNum_NEIGHBORINFO_APP &&
             (!moduleConfig.has_neighbor_info || !moduleConfig.neighbor_info.enabled)) {
             LOG_DEBUG("Neighbor info module is disabled, ignoring neighbor packet");
-            cancelSending(p->from, p->id);
+            if(!sendcanceled){
+                cancelSending(p->from, p->id);
+                sendcanceled = true;
+            }
             skipHandle = true;
         }
 
@@ -623,7 +684,10 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
                       meshtastic_PortNum_PRIVATE_APP, meshtastic_PortNum_DETECTION_SENSOR_APP, meshtastic_PortNum_RANGE_TEST_APP,
                       meshtastic_PortNum_REMOTE_HARDWARE_APP)) {
             LOG_DEBUG("Ignoring packet on blacklisted portnum for CORE_PORTNUMS_ONLY");
-            cancelSending(p->from, p->id);
+            if (!sendcanceled) {
+                cancelSending(p->from, p->id);
+                sendcanceled = true;
+            }
             skipHandle = true;
         }
     } else {
