@@ -619,7 +619,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
                 ChannelIndex chIndex = 0;
                 bool unkwnownChannel = true;
                 for (chIndex = 0; chIndex < channels.getNumChannels(); chIndex++) {
-                    // LOG_INFO("handleReceiveInterrupt : Test channel index %d for hash %d", chIndex, mp->channel);
+                    LOG_INFO("JM Mod: Test channel index %d for hash %d", chIndex, mp->channel);
                     if (channels.decryptForHash(chIndex, p->channel)) {
                         LOG_INFO("JM Mod: Found channel index %d for hash %d", chIndex, p->channel);
                         if(channels.isDefaultChannel(chIndex)) {
@@ -635,7 +635,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
                     }
                 }
                 if(unkwnownChannel) {
-                    LOG_WARN("JM Mod: Drop message from !%x with hop_start of %d (> than %d)! (This node is in LOCAL or KNOWN ONLY mode. Message is not directly for us with channel hash %d.)", p->from, p->hop_start, HOP_RELIABLE, p->channel);
+                    LOG_WARN("JM Mod: Drop message from !%x with hop_start of %d (> than %d)! (Message is not directly for us with channel hash %d. This node is in LOCAL or KNOWN ONLY mode.)", p->from, p->hop_start, HOP_RELIABLE, p->channel);
                     if(!sendcanceled){
                         cancelSending(p->from, p->id);
                         sendcanceled = true;
@@ -649,7 +649,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 
         if ((config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY 
             || config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY) 
-            && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+            && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !sendcanceled &&
             IS_ONE_OF(p->decoded.portnum, meshtastic_PortNum_ATAK_FORWARDER, meshtastic_PortNum_ATAK_PLUGIN,
                       meshtastic_PortNum_PAXCOUNTER_APP, meshtastic_PortNum_IP_TUNNEL_APP, meshtastic_PortNum_AUDIO_APP,
                       meshtastic_PortNum_PRIVATE_APP, meshtastic_PortNum_DETECTION_SENSOR_APP, meshtastic_PortNum_RANGE_TEST_APP,
