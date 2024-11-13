@@ -239,7 +239,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     }
 
 // JM mod start
-    LOG_INFO("JM Mod: Going to send a message with PortNum %d on channel %d .", p->decoded.portnum, p->channel);
+    LOG_INFO("JM Mod: TXDATA,%d,!%x,!%x,%d,%d,%x", p->decoded.portnum, p->from, p->to, p->hop_start, p->hop_limit, p->channel);
     if (isFromUs(p) && channels.isDefaultChannel(p->channel) &&
         (p->decoded.portnum == meshtastic_PortNum_AUDIO_APP ||              //   9
         p->decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP ||    //  10
@@ -613,29 +613,28 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY ||
             config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY)) {
             if(isToUs(p)){
-                LOG_INFO("JM Mod: Message is for us, so we keep it. Type %d from !%x to !%x and a hop_start of %d and a hop_limit of %d on channel hash %x", p->decoded.portnum, p->from, p->to, p->hop_start, p->hop_limit, p->channel);
+                LOG_INFO("JM Mod: Message is for us, so we keep it. Portnum %d from !%x to !%x and a hop_start of %d and a hop_limit of %d on channel hash %x", p->decoded.portnum, p->from, p->to, p->hop_start, p->hop_limit, p->channel);
             } else {
                 // Try to find a known channel and check if it is not the default channel
                 ChannelIndex chIndex = 0;
                 bool unkwnownChannel = true;
                 for (chIndex = 0; chIndex < channels.getNumChannels(); chIndex++) {
-                    LOG_INFO("JM Mod: Test channel index %d for hash %d", chIndex, mp->channel);
-                    if (channels.decryptForHash(chIndex, p->channel)) {
-                        LOG_INFO("JM Mod: Found channel index %d for hash %d", chIndex, p->channel);
+                    // LOG_INFO("JM Mod: Test channel index %d for hash %d", chIndex, p->channel);
+                    if(chIndex == p->channel) {
                         if(channels.isDefaultChannel(chIndex)) {
-                            LOG_WARN("JM Mod: Drop message from !%x with hop_start of %d (> than %d)! (This node is in LOCAL or KNOWN ONLY mode. Message is not directly for us on default channel.)", p->from, p->hop_start, HOP_RELIABLE);
+                            LOG_WARN("JM Mod: Drop message from !%x with hop_start of %d (> than %d)! (Node is in LOCAL or KNOWN ONLY mode. Message is not for us on default channel.)", p->from, p->hop_start, HOP_RELIABLE);
                             cancelSending(p->from, p->id);
                             sendcanceled = true;
                             skipHandle = true;
+                            unkwnownChannel = false;
                         } else {
-                            LOG_INFO("JM Mod: Message recieved on non default channel %d from !%x to !%x and a hop_start of %d and a hop_limit of %d, but we keep it.", chIndex, p->from, p->to, p->hop_start, p->hop_limit);
+                            LOG_INFO("JM Mod: Message received on known non-default channel %d from !%x to !%x and a hop_start of %d and a hop_limit of %d, but we keep it.", chIndex, p->from, p->to, p->hop_start, p->hop_limit);
                             unkwnownChannel = false;
                         }
-                        break;
                     }
                 }
                 if(unkwnownChannel) {
-                    LOG_WARN("JM Mod: Drop message from !%x with hop_start of %d (> than %d)! (Message is not directly for us with channel hash %d. This node is in LOCAL or KNOWN ONLY mode.)", p->from, p->hop_start, HOP_RELIABLE, p->channel);
+                    LOG_WARN("JM Mod: Drop message from !%x with hop_start of %d (> than %d)! (Message is on unknown channel hash %d. Node is in LOCAL or KNOWN ONLY mode.)", p->from, p->hop_start, HOP_RELIABLE, p->channel);
                     if(!sendcanceled){
                         cancelSending(p->from, p->id);
                         sendcanceled = true;
