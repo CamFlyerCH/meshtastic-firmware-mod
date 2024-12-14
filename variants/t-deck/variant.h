@@ -30,8 +30,12 @@
 #ifndef HAS_TFT
 #define BUTTON_PIN 0
 // #define BUTTON_NEED_PULLUP
+<<<<<<< HEAD
 #endif
 
+=======
+#define GPS_DEFAULT_NOT_PRESENT 1
+>>>>>>> 92225eb6c3ac60a12995432a4bfac0ee3641f093
 #define GPS_RX_PIN 44
 #define GPS_TX_PIN 43
 

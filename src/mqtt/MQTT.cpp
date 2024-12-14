@@ -167,17 +167,26 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                     if (isFromUs(p)) {
                         LOG_INFO("Ignore downlink message we originally sent");
                         packetPool.release(p);
+                        free(e.channel_id);
+                        free(e.gateway_id);
+                        free(e.packet);
                         return;
                     }
                     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
                         if (moduleConfig.mqtt.encryption_enabled) {
                             LOG_INFO("Ignore decoded message on MQTT, encryption is enabled");
                             packetPool.release(p);
+                            free(e.channel_id);
+                            free(e.gateway_id);
+                            free(e.packet);
                             return;
                         }
                         if (p->decoded.portnum == meshtastic_PortNum_ADMIN_APP) {
                             LOG_INFO("Ignore decoded admin packet");
                             packetPool.release(p);
+                            free(e.channel_id);
+                            free(e.gateway_id);
+                            free(e.packet);
                             return;
                         }
                         p->channel = ch.index;
@@ -336,7 +345,7 @@ void MQTT::reconnect()
             mqttPassword = moduleConfig.mqtt.password;
         }
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
-#if !defined(CONFIG_IDF_TARGET_ESP32C6) && !defined(RPI_PICO)
+#if !defined(CONFIG_IDF_TARGET_ESP32C6)
         if (moduleConfig.mqtt.tls_enabled) {
             // change default for encrypted to 8883
             try {
@@ -545,9 +554,11 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
 
     // mp_decoded will not be decoded when it's PKI encrypted and not directed to us
     if (mp_decoded.which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+        // For uplinking other's packets, check if it's not OK to MQTT or if it's an older packet without the bitfield
+        bool dontUplink = !mp_decoded.decoded.has_bitfield ||
+                          (mp_decoded.decoded.has_bitfield && !(mp_decoded.decoded.bitfield & BITFIELD_OK_TO_MQTT_MASK));
         // check for the lowest bit of the data bitfield set false, and the use of one of the default keys.
-        if (!isFromUs(&mp_decoded) && !isMqttServerAddressPrivate && mp_decoded.decoded.has_bitfield &&
-            !(mp_decoded.decoded.bitfield & BITFIELD_OK_TO_MQTT_MASK) &&
+        if (!isFromUs(&mp_decoded) && !isMqttServerAddressPrivate && dontUplink &&
             (ch.settings.psk.size < 2 || (ch.settings.psk.size == 16 && memcmp(ch.settings.psk.bytes, defaultpsk, 16)) ||
              (ch.settings.psk.size == 32 && memcmp(ch.settings.psk.bytes, eventpsk, 32)))) {
             LOG_INFO("MQTT onSend - Not forwarding packet due to DontMqttMeBro flag");
