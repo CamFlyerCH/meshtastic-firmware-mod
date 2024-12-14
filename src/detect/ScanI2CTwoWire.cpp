@@ -473,13 +473,9 @@ size_t ScanI2CTwoWire::countDevices() const
 {
     return foundDevices.size();
 }
-<<<<<<< HEAD
-#endif
-=======
 
 void ScanI2CTwoWire::logFoundDevice(const char *device, uint8_t address)
 {
     LOG_INFO("%s found at address 0x%x", device, address);
 }
 #endif
->>>>>>> 92225eb6c3ac60a12995432a4bfac0ee3641f093
