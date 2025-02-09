@@ -1,6 +1,12 @@
 #define I2C_SDA 39
 #define I2C_SCL 40
 
+// This board has a serial coprocessor for sensor readings
+#define SENSOR_RP2040_TXD 19
+#define SENSOR_RP2040_RXD 20
+#define SENSOR_PORT_NUM 2
+#define SENSOR_BAUD_RATE 115200
+
 #define BUTTON_PIN 38
 // #define BUTTON_NEED_PULLUP
 
@@ -63,6 +69,9 @@
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET
 #define SX126X_DIO2_AS_RF_SWITCH
+
+#define TCXO_OPTIONAL // handle Indicator V1 and V2
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
 #define USE_VIRTUAL_KEYBOARD 1
 #define DISPLAY_CLOCK_FRAME 1

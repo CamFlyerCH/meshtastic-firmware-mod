@@ -4,6 +4,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RTC.h"
+#include "SPILock.h"
 #include "meshUtils.h"
 #include <FSCommon.h>
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
@@ -358,19 +359,22 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_delete_file_request_tag: {
         LOG_DEBUG("Client requesting to delete file: %s", r->delete_file_request);
+
 #ifdef FSCom
+        spiLock->lock();
         if (FSCom.remove(r->delete_file_request)) {
             LOG_DEBUG("Successfully deleted file");
         } else {
             LOG_DEBUG("Failed to delete file");
         }
+        spiLock->unlock();
 #endif
         break;
     }
 #ifdef ARCH_PORTDUINO
     case meshtastic_AdminMessage_exit_simulator_tag:
         LOG_INFO("Exiting simulator");
-        _exit(0);
+        exit(0);
         break;
 #endif
 
@@ -489,7 +493,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
                       meshtastic_Config_DeviceConfig_Role_REPEATER)) {
             config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
-            const char *warning = "Rebroadcast mode can't be set to NONE for a router or repeater\n";
+            const char *warning = "Rebroadcast mode can't be set to NONE for a router or repeater";
             LOG_WARN(warning);
             sendWarning(warning);
         }
@@ -1113,7 +1117,6 @@ bool AdminModule::messageIsResponse(const meshtastic_AdminMessage *r)
         r->which_payload_variant == meshtastic_AdminMessage_get_ringtone_response_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_device_connection_status_response_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_node_remote_hardware_pins_response_tag ||
-        r->which_payload_variant == meshtastic_NodeRemoteHardwarePinsResponse_node_remote_hardware_pins_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_ui_config_response_tag)
         return true;
     else

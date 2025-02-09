@@ -1,5 +1,4 @@
 #pragma once
-#include "../variants/rak2560/RAK9154Sensor.h"
 #include "PowerStatus.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
@@ -42,10 +41,12 @@ extern RTC_NOINIT_ATTR uint64_t RTC_reg_b;
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO)
 #include "modules/Telemetry/Sensor/INA219Sensor.h"
+#include "modules/Telemetry/Sensor/INA226Sensor.h"
 #include "modules/Telemetry/Sensor/INA260Sensor.h"
 #include "modules/Telemetry/Sensor/INA3221Sensor.h"
-extern INA260Sensor ina260Sensor;
 extern INA219Sensor ina219Sensor;
+extern INA226Sensor ina226Sensor;
+extern INA260Sensor ina260Sensor;
 extern INA3221Sensor ina3221Sensor;
 #endif
 
@@ -54,8 +55,8 @@ extern INA3221Sensor ina3221Sensor;
 extern MAX17048Sensor max17048Sensor;
 #endif
 
-#if HAS_RAKPROT && !defined(ARCH_PORTDUINO)
-#include "../variants/rak2560/RAK9154Sensor.h"
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && HAS_RAKPROT && !defined(ARCH_PORTDUINO)
+#include "modules/Telemetry/Sensor/RAK9154Sensor.h"
 extern RAK9154Sensor rak9154Sensor;
 #endif
 
