@@ -7,7 +7,9 @@
 #define SENSOR_PORT_NUM 2
 #define SENSOR_BAUD_RATE 115200
 
+#if !HAS_TFT
 #define BUTTON_PIN 38
+#endif
 // #define BUTTON_NEED_PULLUP
 
 // #define BATTERY_PIN 27 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
@@ -71,7 +73,7 @@
 #define SX126X_DIO2_AS_RF_SWITCH
 
 #define TCXO_OPTIONAL // handle Indicator V1 and V2
-#define SX126X_DIO3_TCXO_VOLTAGE 1.8
+#define SX126X_DIO3_TCXO_VOLTAGE 2.4
 
 #define USE_VIRTUAL_KEYBOARD 1
 #define DISPLAY_CLOCK_FRAME 1
