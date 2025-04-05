@@ -247,7 +247,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 
 // JM mod start
     LOG_INFO("JM Mod: TXDATA,%d,!%x,!%x,%d,%d,%x", p->decoded.portnum, p->from, p->to, p->hop_start, p->hop_limit, p->channel);
-    if (isFromUs(p) && channels.isDefaultChannel(p->channel) &&
+    if (isFromUs(p) && channels.isDefaultChannel(p->channel) && Do0HopTelemetry &&
         (p->decoded.portnum == meshtastic_PortNum_AUDIO_APP ||              //   9
         p->decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP ||    //  10
         p->decoded.portnum == meshtastic_PortNum_PAXCOUNTER_APP ||          //  34
@@ -645,7 +645,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
         // LOG_INFO("JM Mod: Message type %d from !%x to !%x and a hop_start of %d and a hop_limit of %d on channel hash %x", p->decoded.portnum, p->from, p->to, p->hop_start, p->hop_limit, p->channel);
         LOG_INFO("JM Mod: RXDATA,%d,!%x,!%x,%d,%d,%x", p->decoded.portnum, p->from, p->to, p->hop_start, p->hop_limit, p->channel);
         bool sendcanceled = false;
-        if(p->hop_start > HOP_RELIABLE &&
+        if(p->hop_start > HOP_LIMITER &&
             (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY ||
             config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY)) {
             if(isToUs(p)){

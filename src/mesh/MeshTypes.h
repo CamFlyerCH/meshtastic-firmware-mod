@@ -40,6 +40,12 @@ enum RxSource {
 /// We normally just use max 3 hops for sending reliable messages
 #define HOP_RELIABLE 3
 
+// JM mod start
+/// Max hops allowed in known only mode, messages with a hop_start greater than this will be dropped
+#define HOP_LIMITER 5
+#define Do0HopTelemetry false
+// JM mod end
+
 // For old firmware or when falling back to flooding, there is no next-hop preference
 #define NO_NEXT_HOP_PREFERENCE 0
 // For old firmware there is no relay node set
