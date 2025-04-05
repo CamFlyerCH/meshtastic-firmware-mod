@@ -680,10 +680,10 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             }
         }
 
-
+        // 0 hop telemetry and similar messages should not be rebroadcasted
         if ((config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY 
             || config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY) 
-            && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !sendcanceled &&
+            && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !sendcanceled && Do0HopTelemetry &&
             IS_ONE_OF(p->decoded.portnum, meshtastic_PortNum_ATAK_FORWARDER, meshtastic_PortNum_ATAK_PLUGIN,
                       meshtastic_PortNum_PAXCOUNTER_APP, meshtastic_PortNum_IP_TUNNEL_APP, meshtastic_PortNum_AUDIO_APP,
                       meshtastic_PortNum_PRIVATE_APP, meshtastic_PortNum_DETECTION_SENSOR_APP, meshtastic_PortNum_RANGE_TEST_APP,
