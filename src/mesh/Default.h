@@ -6,6 +6,7 @@
 #define ONE_MINUTE_MS 60 * 1000
 #define THIRTY_SECONDS_MS 30 * 1000
 #define FIVE_SECONDS_MS 5 * 1000
+#define TEN_SECONDS_MS 10 * 1000
 
 #define min_default_telemetry_interval_secs 30 * 60
 #define default_gps_update_interval IF_ROUTER(ONE_DAY, 2 * 60)
@@ -25,6 +26,8 @@
 #define default_mqtt_username "meshdev"
 #define default_mqtt_password "large4cats"
 #define default_mqtt_root "msh"
+#define default_mqtt_encryption_enabled true
+#define default_mqtt_tls_enabled false
 
 #define IF_ROUTER(routerVal, normalVal)                                                                                          \
     ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER) ? (routerVal) : (normalVal))

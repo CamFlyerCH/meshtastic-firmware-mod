@@ -87,7 +87,9 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* Infineon DPS310 High accuracy pressure and temperature */
     meshtastic_TelemetrySensorType_DPS310 = 36,
     /* RAKWireless RAK12035 Soil Moisture Sensor Module */
-    meshtastic_TelemetrySensorType_RAK12035 = 37
+    meshtastic_TelemetrySensorType_RAK12035 = 37,
+    /* MAX17261 lipo battery gauge */
+    meshtastic_TelemetrySensorType_MAX17261 = 38
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -242,7 +244,7 @@ typedef struct _meshtastic_AirQualityMetrics {
     /* 10.0um Particle Count */
     bool has_particles_100um;
     uint32_t particles_100um;
-    /* 10.0um Particle Count */
+    /* CO2 concentration in ppm */
     bool has_co2;
     uint32_t co2;
 } meshtastic_AirQualityMetrics;
@@ -324,8 +326,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_RAK12035
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_RAK12035+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_MAX17261
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_MAX17261+1))
 
 
 
