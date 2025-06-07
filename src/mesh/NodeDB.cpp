@@ -261,7 +261,7 @@ NodeDB::NodeDB()
 
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
 
-    if (!owner.is_licensed) {
+    if (!owner.is_licensed && config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
         bool keygenSuccess = false;
         if (config.security.private_key.size == 32) {
             if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
@@ -328,6 +328,11 @@ NodeDB::NodeDB()
         moduleConfig.telemetry.health_update_interval = Default::getConfiguredOrMinimumValue(
             moduleConfig.telemetry.health_update_interval, min_default_telemetry_interval_secs);
     }
+    if (moduleConfig.mqtt.has_map_report_settings &&
+        moduleConfig.mqtt.map_report_settings.publish_interval_secs < default_map_publish_interval_secs) {
+        moduleConfig.mqtt.map_report_settings.publish_interval_secs = default_map_publish_interval_secs;
+    }
+
     // Ensure that the neighbor info update interval is coerced to the minimum
     moduleConfig.neighbor_info.update_interval =
         Default::getConfiguredOrMinimumValue(moduleConfig.neighbor_info.update_interval, min_neighbor_info_broadcast_secs);
@@ -819,10 +824,19 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
         initConfigIntervals();
         initModuleConfigIntervals();
         config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY;
+        owner.has_is_unmessagable = true;
+        owner.is_unmessagable = true;
+    } else if (role == meshtastic_Config_DeviceConfig_Role_ROUTER_LATE) {
+        owner.has_is_unmessagable = true;
+        owner.is_unmessagable = true;
     } else if (role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
+        owner.has_is_unmessagable = true;
+        owner.is_unmessagable = true;
         config.display.screen_on_secs = 1;
         config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_CORE_PORTNUMS_ONLY;
     } else if (role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
+        owner.has_is_unmessagable = true;
+        owner.is_unmessagable = true;
         moduleConfig.telemetry.environment_measurement_enabled = true;
         moduleConfig.telemetry.environment_update_interval = 300;
     } else if (role == meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND) {
@@ -837,7 +851,12 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
             (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_SPEED |
              meshtastic_Config_PositionConfig_PositionFlags_HEADING | meshtastic_Config_PositionConfig_PositionFlags_DOP);
         moduleConfig.telemetry.device_update_interval = ONE_DAY;
+    } else if (role == meshtastic_Config_DeviceConfig_Role_TRACKER) {
+        owner.has_is_unmessagable = true;
+        owner.is_unmessagable = true;
     } else if (role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) {
+        owner.has_is_unmessagable = true;
+        owner.is_unmessagable = true;
         config.device.node_info_broadcast_secs = ONE_DAY;
         config.position.position_broadcast_smart_enabled = true;
         config.position.position_broadcast_secs = 3 * 60; // Every 3 minutes
@@ -970,6 +989,8 @@ void NodeDB::installDefaultDeviceState()
 #endif
     snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum()); // Default node ID now based on nodenum
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
+    owner.has_is_unmessagable = true;
+    owner.is_unmessagable = false;
 }
 
 // We reserve a few nodenums for future use
@@ -1497,6 +1518,8 @@ void NodeDB::addFromContact(meshtastic_SharedContact contact)
     info->has_user = true;
     info->user = TypeConversions::ConvertToUserLite(contact.user);
     info->is_favorite = true;
+    // Mark the node's key as manually verified to indicate trustworthiness.
+    info->bitfield |= NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK;
     updateGUIforNode = info;
     powerFSM.trigger(EVENT_NODEDB_UPDATED);
     notifyObservers(true); // Force an update whether or not our node counts have changed
@@ -1632,8 +1655,10 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             int oldestIndex = -1;
             int oldestBoringIndex = -1;
             for (int i = 1; i < numMeshNodes; i++) {
-                // Simply the oldest non-favorite node
-                if (!meshNodes->at(i).is_favorite && !meshNodes->at(i).is_ignored && meshNodes->at(i).last_heard < oldest) {
+                // Simply the oldest non-favorite, non-ignored, non-verified node
+                if (!meshNodes->at(i).is_favorite && !meshNodes->at(i).is_ignored &&
+                    !(meshNodes->at(i).bitfield & NODEINFO_BITFIELD_IS_KEY_MANUALLY_VERIFIED_MASK) &&
+                    meshNodes->at(i).last_heard < oldest) {
                     oldest = meshNodes->at(i).last_heard;
                     oldestIndex = i;
                 }
