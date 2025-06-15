@@ -42,7 +42,7 @@ enum RxSource {
 
 // JM mod start
 /// Max hops allowed in known only mode, messages with a hop_start greater than this will be dropped
-#define HOP_LIMITER 3
+#define HOP_LIMITER 5
 #define Do0HopTelemetry true
 // JM mod end
 
