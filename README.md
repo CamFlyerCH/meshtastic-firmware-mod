@@ -15,11 +15,18 @@
 
 ## Overview
 
-This repository contains a fork of the official device firmware for Meshtastic. 
+This repository contains the official device firmware for Meshtastic, an open-source LoRa mesh networking project designed for long-range, low-power communication without relying on internet or cellular infrastructure. The firmware supports various hardware platforms, including ESP32, nRF52, RP2040/RP2350, and Linux-based devices.
 
-These modifactions are built in in this firmware version:
-- Messages with sent from a node configured with max hops > 3 are discarded. These packets are not forwarded to other nodes or to the phone. (Rebroadcast mode must be configured to LOCAL_ONLY to enable this feature, also it is only applyed on the default channel)
-- Messages like Telemetry are always brodcasted with 0 hops left, so they are not rebroadcasted any further. This allows to use a max hops setting of 1-3 but still not flooding the mesh with telemetry packets probably only relevant to you.
+Meshtastic enables text messaging, location sharing, and telemetry over a decentralized mesh network, making it ideal for outdoor adventures, emergency preparedness, and remote operations.
 
-All changes are only in this file: https://github.com/CamFlyerCH/meshtastic-firmware-mod/blob/master/src/mesh/Router.cpp   (Search for // JM mod start comments)
+### Get Started
+
+- 🔧 **[Building Instructions](https://meshtastic.org/docs/development/firmware/build)** – Learn how to compile the firmware from source.
+- ⚡ **[Flashing Instructions](https://meshtastic.org/docs/getting-started/flashing-firmware/)** – Install or update the firmware on your device.
+
+Join our community and help improve Meshtastic! 🚀
+
+## Stats
+
+![Alt](https://repobeats.axiom.co/api/embed/8025e56c482ec63541593cc5bd322c19d5c0bdcf.svg "Repobeats analytics image")
 
