@@ -189,6 +189,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define DFROBOT_RAIN_ADDR 0x1d
 #define NAU7802_ADDR 0x2A
 #define MAX30102_ADDR 0x57
+#define SCD4X_ADDR 0x62
 #define MLX90614_ADDR_DEF 0x5A
 #define CGRADSENS_ADDR 0x66
 #define LTR390UV_ADDR 0x53
@@ -207,6 +208,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BMX160_ADDR 0x69
 #define ICM20948_ADDR 0x69
 #define ICM20948_ADDR_ALT 0x68
+#define BMM150_ADDR 0x13
 
 // -----------------------------------------------------------------------------
 // LED
@@ -347,9 +349,39 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #error HW_VENDOR must be defined
 #endif
 
+#ifndef TB_DOWN
+#define TB_DOWN 255
+#endif
+#ifndef TB_UP
+#define TB_UP 255
+#endif
+#ifndef TB_LEFT
+#define TB_LEFT 255
+#endif
+#ifndef TB_RIGHT
+#define TB_RIGHT 255
+#endif
+#ifndef TB_PRESS
+#define TB_PRESS 255
+#endif
+
 // Support multiple RGB LED configuration
 #if defined(HAS_NCP5623) || defined(HAS_LP5562) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
 #define HAS_RGB_LED
+#endif
+
+// default mapping of pins
+#if defined(PIN_BUTTON2) && !defined(CANCEL_BUTTON_PIN)
+#define ALT_BUTTON_PIN PIN_BUTTON2
+#endif
+#if defined ALT_BUTTON_PIN
+
+#ifndef ALT_BUTTON_ACTIVE_LOW
+#define ALT_BUTTON_ACTIVE_LOW true
+#endif
+#ifndef ALT_BUTTON_ACTIVE_PULLUP
+#define ALT_BUTTON_ACTIVE_PULLUP true
+#endif
 #endif
 
 // -----------------------------------------------------------------------------

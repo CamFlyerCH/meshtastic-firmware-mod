@@ -179,7 +179,11 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define I2C_NO_RESCAN // I2C is a bit finicky, don't scan too much
 #define WIRE_INTERFACES_COUNT 1
 
-#if !defined(XIAO_BLE_LEGACY_PINOUT) && !defined(GPS_L76K)
+#if defined(XIAO_BLE_LEGACY_PINOUT)
+// Used for I2C by DIY xiao_ble variant
+#define PIN_WIRE_SDA D4
+#define PIN_WIRE_SCL D5
+#elif !defined(GPS_L76K)
 // If D6 and D7 are free, I2C is probably the most versatile assignment
 #define PIN_WIRE_SDA D6
 #define PIN_WIRE_SCL D7
@@ -201,7 +205,7 @@ static const uint8_t SCL = PIN_WIRE_SCL;
  * - SX1262X CS on XIAO BLE legacy pinout
  */
 
-#if !defined(GPS_L76K) && !defined(SEEED_XIAO_WIO_BTB) && !defined(XIAO_BLE_OLD_PINOUT)
+#if !defined(GPS_L76K) && !defined(SEEED_XIAO_WIO_BTB) && !defined(XIAO_BLE_LEGACY_PINOUT)
 #define BUTTON_PIN D0
 #endif
 
