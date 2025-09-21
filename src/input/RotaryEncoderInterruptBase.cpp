@@ -18,14 +18,23 @@ void RotaryEncoderInterruptBase::init(
     this->_eventCcw = eventCcw;
     this->_eventPressed = eventPressed;
 
-    pinMode(pinPress, INPUT_PULLUP);
-    pinMode(this->_pinA, INPUT_PULLUP);
-    pinMode(this->_pinB, INPUT_PULLUP);
+    bool isRAK = false;
+#ifdef RAK_4631
+    isRAK = true;
+#endif
 
-    //    attachInterrupt(pinPress, onIntPress, RISING);
-    attachInterrupt(pinPress, onIntPress, RISING);
-    attachInterrupt(this->_pinA, onIntA, CHANGE);
-    attachInterrupt(this->_pinB, onIntB, CHANGE);
+    if (!isRAK || pinPress != 0) {
+        pinMode(pinPress, INPUT_PULLUP);
+        attachInterrupt(pinPress, onIntPress, RISING);
+    }
+    if (!isRAK || this->_pinA != 0) {
+        pinMode(this->_pinA, INPUT_PULLUP);
+        attachInterrupt(this->_pinA, onIntA, CHANGE);
+    }
+    if (!isRAK || this->_pinA != 0) {
+        pinMode(this->_pinB, INPUT_PULLUP);
+        attachInterrupt(this->_pinB, onIntB, CHANGE);
+    }
 
     this->rotaryLevelA = digitalRead(this->_pinA);
     this->rotaryLevelB = digitalRead(this->_pinB);
@@ -34,7 +43,7 @@ void RotaryEncoderInterruptBase::init(
 
 int32_t RotaryEncoderInterruptBase::runOnce()
 {
-    InputEvent e;
+    InputEvent e = {};
     e.inputEvent = INPUT_BROKER_NONE;
     e.source = this->_originName;
 
@@ -111,7 +120,7 @@ RotaryEncoderInterruptBaseStateType RotaryEncoderInterruptBase::intHandler(bool 
         // Logic to prevent bouncing.
         newState = ROTARY_EVENT_CLEARED;
     }
-    setIntervalFromNow(50); // TODO: this modifies a non-volatile variable!
+    setIntervalFromNow(ROTARY_DELAY); // TODO: this modifies a non-volatile variable!
 
     return newState;
 }
