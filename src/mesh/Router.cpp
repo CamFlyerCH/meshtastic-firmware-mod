@@ -270,7 +270,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         p->decoded.portnum == meshtastic_PortNum_NEIGHBORINFO_APP ||        //  71
         p->decoded.portnum == meshtastic_PortNum_POWERSTRESS_APP ||         //  74
         p->decoded.portnum == meshtastic_PortNum_PRIVATE_APP)) {            // 256
-        p->hop_limit = 1;
+        p->hop_limit = 0;
         LOG_INFO("JM Mod: Changed hop_limit of our message to 0 because the message type %d should not be flood routed on a default channel !", p->decoded.portnum);
     }
 // JM mod end
