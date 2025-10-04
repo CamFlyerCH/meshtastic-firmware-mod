@@ -311,8 +311,11 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     }
 
 // JM mod start
+    // Constants HOP_LIMITER and Do0HopTelemetry defined in src/mesh/MeshTypes.h
+    // If this is a packet from us on the default channel sent as a broadcast, and it is one of the unimportant app types that shouldn't be
+    // routed any further, change the hop_limit to 0 so it doesn't get relayed.
     LOG_INFO("JM Mod: TXDATA,%d,!%x,!%x,%d,%d,%x", p->decoded.portnum, p->from, p->to, p->hop_start, p->hop_limit, p->channel);
-    if (isFromUs(p) && channels.isDefaultChannel(p->channel) && Do0HopTelemetry &&
+    if (isFromUs(p) && isBroadcast(p->to) && channels.isDefaultChannel(p->channel) && Do0HopTelemetry &&
         (p->decoded.portnum == meshtastic_PortNum_AUDIO_APP ||              //   9
         p->decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP ||    //  10
         p->decoded.portnum == meshtastic_PortNum_PAXCOUNTER_APP ||          //  34
@@ -324,7 +327,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         p->decoded.portnum == meshtastic_PortNum_POWERSTRESS_APP ||         //  74
         p->decoded.portnum == meshtastic_PortNum_PRIVATE_APP)) {            // 256
         p->hop_limit = 0;
-        LOG_INFO("JM Mod: Changed hop_limit of our message to 0 because the message type %d should not be flood routed on a default channel !", p->decoded.portnum);
+        LOG_INFO("JM Mod: Changed hop_limit of our broadcast message to 0, because the message type %d should not be routed on a default channel !", p->decoded.portnum);
     }
 // JM mod end
 
@@ -714,73 +717,69 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 
             
 // JM mod start
-        // LOG_INFO("JM Mod: Message type %d from !%x to !%x and a hop_start of %d and a hop_limit of %d on channel hash %x", p->decoded.portnum, p->from, p->to, p->hop_start, p->hop_limit, p->channel);
+        // Constants HOP_LIMITER and Do0HopTelemetry defined in src/mesh/MeshTypes.h
+        // If the message has a hop_start > HOP_LIMITER and we are in LOCAL_ONLY or KNOWN_ONLY rebroadcast mode, drop it if it is not for us or on a known non-default channel
         LOG_INFO("JM Mod: RXDATA,%d,!%x,!%x,%d,%d,%x", p->decoded.portnum, p->from, p->to, p->hop_start, p->hop_limit, p->channel);
-        bool sendcanceled = false;
-        if(p->hop_start > HOP_LIMITER &&
+        bool sendcanceled = false;  // Needed to not cancel sending twice
+
+        // Drop if hop_start > HOP_LIMITER and in LOCAL_ONLY or KNOWN_ONLY mode
+        if (p->hop_start > HOP_LIMITER &&
             (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY ||
-            config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY)) {
-            if(isToUs(p)){
-                LOG_INFO("JM Mod: Message is for us, so we keep it. Portnum %d from !%x to !%x and a hop_start of %d and a hop_limit of %d on channel hash %x", p->decoded.portnum, p->from, p->to, p->hop_start, p->hop_limit, p->channel);
+             config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY)) {
+
+            if (isToUs(p)) {
+                LOG_INFO("JM Mod: Message is for us, so we keep it. Portnum %d from !%x to !%x and a hop_start of %d and a hop_limit of %d on channel hash %x",
+                         p->decoded.portnum, p->from, p->to, p->hop_start, p->hop_limit, p->channel);
             } else {
-                // Try to find a known channel and check if it is not the default channel
-                ChannelIndex chIndex = 0;
-                bool unkwnownChannel = true;
-                for (chIndex = 0; chIndex < channels.getNumChannels(); chIndex++) {
-                    // LOG_INFO("JM Mod: Test channel index %d for hash %d", chIndex, p->channel);
-                    if(chIndex == p->channel) {
-                        if(channels.isDefaultChannel(chIndex)) {
-                            LOG_WARN("JM Mod: Drop message from !%x with hop_start of %d (> than %d)! (Node is in LOCAL or KNOWN ONLY mode. Message is not for us on default channel.)", p->from, p->hop_start, HOP_RELIABLE);
+                bool knownNonDefaultChannel = false;
+                for (ChannelIndex chIndex = 0; chIndex < channels.getNumChannels(); chIndex++) {
+                    if (chIndex == p->channel) {
+                        if (channels.isDefaultChannel(chIndex)) {
+                            LOG_WARN("JM Mod: Drop message from !%x with hop_start of %d (> than %d)! (Node is in LOCAL or KNOWN ONLY mode. Message is not for us on default channel.)",
+                                     p->from, p->hop_start, HOP_LIMITER);
                             cancelSending(p->from, p->id);
                             sendcanceled = true;
                             skipHandle = true;
-                            unkwnownChannel = false;
+                            break;
                         } else {
-                            LOG_INFO("JM Mod: Message received on known non-default channel %d from !%x to !%x and a hop_start of %d and a hop_limit of %d, but we keep it.", chIndex, p->from, p->to, p->hop_start, p->hop_limit);
-                            unkwnownChannel = false;
+                            LOG_INFO("JM Mod: Message received on known non-default channel %d from !%x to !%x and a hop_start of %d and a hop_limit of %d, but we keep it.",
+                                     chIndex, p->from, p->to, p->hop_start, p->hop_limit);
+                            knownNonDefaultChannel = true;
+                            break;
                         }
                     }
                 }
-                if(unkwnownChannel) {
-                    LOG_WARN("JM Mod: Drop message from !%x with hop_start of %d (> than %d)! (Message is on unknown channel hash %d. Node is in LOCAL or KNOWN ONLY mode.)", p->from, p->hop_start, HOP_RELIABLE, p->channel);
-                    if(!sendcanceled){
-                        cancelSending(p->from, p->id);
-                        sendcanceled = true;
-                    }
+                if (!knownNonDefaultChannel && !sendcanceled) {
+                    LOG_WARN("JM Mod: Drop message from !%x with hop_start of %d (> than %d)! (Message is on unknown channel hash %d. Node is in LOCAL or KNOWN ONLY mode.)",
+                             p->from, p->hop_start, HOP_LIMITER, p->channel);
+                    cancelSending(p->from, p->id);
+                    sendcanceled = true;
                     skipHandle = true;
                 }
             }
         }
 
         // 0 hop telemetry and similar messages should not be rebroadcasted
-        if ((config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY 
-            || config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY) 
-            && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !sendcanceled && Do0HopTelemetry &&
+        if ((config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY ||
+             config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY) &&
+            p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !sendcanceled && Do0HopTelemetry &&
             IS_ONE_OF(p->decoded.portnum, meshtastic_PortNum_ATAK_FORWARDER, meshtastic_PortNum_ATAK_PLUGIN,
                       meshtastic_PortNum_PAXCOUNTER_APP, meshtastic_PortNum_IP_TUNNEL_APP, meshtastic_PortNum_AUDIO_APP,
                       meshtastic_PortNum_PRIVATE_APP, meshtastic_PortNum_DETECTION_SENSOR_APP, meshtastic_PortNum_RANGE_TEST_APP,
                       meshtastic_PortNum_REMOTE_HARDWARE_APP, meshtastic_PortNum_TELEMETRY_APP, meshtastic_PortNum_NEIGHBORINFO_APP)) {
             LOG_WARN("JM Mod: Don't retransmit message with portnum %d from !%x", p->decoded.portnum, p->from);
-            if(!sendcanceled){
-                cancelSending(p->from, p->id);
-                sendcanceled = true;
-            }
-            // skipHandle = true;
+            cancelSending(p->from, p->id);
         }
-
 
         // Neighbor info module is disabled, ignore expensive neighbor info packets
         if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
             p->decoded.portnum == meshtastic_PortNum_NEIGHBORINFO_APP &&
             (!moduleConfig.has_neighbor_info || !moduleConfig.neighbor_info.enabled)) {
             LOG_DEBUG("Neighbor info module is disabled, ignore neighbor packet");
-            if(!sendcanceled){
-                cancelSending(p->from, p->id);
-                sendcanceled = true;
-            }
+            cancelSending(p->from, p->id);
+            // JM mod: I like to see these packets
             // skipHandle = true;
         }
-
 // JM mod end
 
 
