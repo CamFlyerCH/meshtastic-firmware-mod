@@ -378,7 +378,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
             case SHT31_4x_ADDR:     // same as OPT3001_ADDR_ALT
             case SHT31_4x_ADDR_ALT: // same as OPT3001_ADDR
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x89), 2);
-                if (registerValue == 0x11a2 || registerValue == 0x11da || registerValue == 0xe9c || registerValue == 0xc8d) {
+                if (registerValue == 0x11a2 || registerValue == 0x11da || registerValue == 0x11f3 || registerValue == 0xe9c ||
+                    registerValue == 0xc8d) {
                     type = SHT4X;
                     logFoundDevice("SHT4X", (uint8_t)addr.address);
                 } else if (getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x7E), 2) == 0x5449) {
@@ -484,7 +485,26 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(LTR390UV_ADDR, LTR390UV, "LTR390UV", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(PCT2075_ADDR, PCT2075, "PCT2075", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(CST328_ADDR, CST328, "CST328", (uint8_t)addr.address);
-                SCAN_SIMPLE_CASE(LTR553ALS_ADDR, LTR553ALS, "LTR553ALS", (uint8_t)addr.address);
+                SCAN_SIMPLE_CASE(CHSC6X_ADDR, CHSC6X, "CHSC6X", (uint8_t)addr.address);
+            case LTR553ALS_ADDR:
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x86), 1); // Part ID register
+                if (registerValue == 0x92) {                                                       // LTR553ALS Part ID
+                    type = LTR553ALS;
+                    logFoundDevice("LTR553ALS", (uint8_t)addr.address);
+                } else {
+                    // Test BH1750 - send power on command
+                    i2cBus->beginTransmission(addr.address);
+                    i2cBus->write(0x01); // Power On command
+                    uint8_t bh1750_error = i2cBus->endTransmission();
+                    if (bh1750_error == 0) {
+                        type = BH1750;
+                        logFoundDevice("BH1750", (uint8_t)addr.address);
+                    } else {
+                        LOG_INFO("Device found at address 0x%x was not able to be enumerated", (uint8_t)addr.address);
+                    }
+                }
+                break;
+
                 SCAN_SIMPLE_CASE(BHI260AP_ADDR, BHI260AP, "BHI260AP", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(SCD4X_ADDR, SCD4X, "SCD4X", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(BMM150_ADDR, BMM150, "BMM150", (uint8_t)addr.address);
@@ -580,7 +600,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
     scanPort(port, nullptr, 0);
 }
 
-TwoWire *ScanI2CTwoWire::fetchI2CBus(ScanI2C::DeviceAddress address) const
+TwoWire *ScanI2CTwoWire::fetchI2CBus(ScanI2C::DeviceAddress address)
 {
     if (address.port == ScanI2C::I2CPort::WIRE) {
         return &Wire;

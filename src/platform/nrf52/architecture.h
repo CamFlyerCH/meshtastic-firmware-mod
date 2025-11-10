@@ -60,6 +60,8 @@
 // MAke sure all custom RAK4630 boards are defined before the generic RAK4630
 #elif defined(RAK4630)
 #define HW_VENDOR meshtastic_HardwareModel_RAK4631
+#elif defined(RAK3401)
+#define HW_VENDOR meshtastic_HardwareModel_RAK3401
 #elif defined(TTGO_T_ECHO)
 #define HW_VENDOR meshtastic_HardwareModel_T_ECHO
 #elif defined(T_ECHO_LITE)
@@ -151,3 +153,6 @@
 // No serial ports on this board - ONLY use segger in memory console
 #define USE_SEGGER
 #endif
+
+// Detect if running in ISR context (ARM Cortex-M4)
+#define xPortInIsrContext() ((SCB->ICSR & SCB_ICSR_VECTACTIVE_Msk) == 0 ? pdFALSE : pdTRUE)
