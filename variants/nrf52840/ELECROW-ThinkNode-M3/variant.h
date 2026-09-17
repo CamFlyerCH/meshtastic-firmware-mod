@@ -37,7 +37,8 @@ extern "C" {
 
 // Power Pin
 #define NRF_APM
-#define GPS_POWER 14
+#define PIN_GPS_EN 14
+#define GPS_EN_ACTIVE HIGH
 #define PIN_POWER_USB 31
 #define EXT_PWR_DETECT PIN_POWER_USB
 #define PIN_POWER_DONE 24
@@ -50,14 +51,13 @@ extern "C" {
 #define EEPROM_POWER 7
 
 // LED
-#define red_LED_PIN 33
-#define LED_POWER red_LED_PIN
-#define LED_CHARGE LED_POWER // Signals the Status LED Module to handle this LED
-#define green_LED_PIN 35
+#define LED_RED 33
+#define LED_POWER LED_RED
+#define LED_GREEN 35
+#define LED_NOTIFICATION LED_GREEN
 #define LED_BLUE 37
 #define LED_PAIRING LED_BLUE // Signals the Status LED Module to handle this LED
 
-#define LED_BUILTIN -1
 #define LED_STATE_ON LOW
 #define LED_STATE_OFF HIGH
 
@@ -78,11 +78,11 @@ extern "C" {
 #define GPS_BAUDRATE 9600
 #define PIN_GPS_RESET 25
 #define PIN_GPS_STANDBY 21
-#define GPS_TX_PIN 20
-#define GPS_RX_PIN 22
+#define GPS_TX_PIN 22
+#define GPS_RX_PIN 20
 #define GPS_THREAD_INTERVAL 50
-#define PIN_SERIAL1_RX GPS_TX_PIN
-#define PIN_SERIAL1_TX GPS_RX_PIN
+#define PIN_SERIAL1_TX GPS_TX_PIN
+#define PIN_SERIAL1_RX GPS_RX_PIN
 // Button
 #define BUTTON_PIN 12
 #define BUTTON_PIN_ALT (0 + 12)
@@ -111,6 +111,8 @@ extern "C" {
 #define LR1110_SPI_MISO_PIN 47
 #define LR11X0_DIO3_TCXO_VOLTAGE 3.3
 #define LR11X0_DIO_AS_RF_SWITCH
+
+#define SERIAL_PRINT_PORT 0
 
 // PCF8563 RTC Module
 #define PCF8563_RTC 0x51

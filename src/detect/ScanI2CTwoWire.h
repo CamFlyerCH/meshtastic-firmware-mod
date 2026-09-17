@@ -53,7 +53,9 @@ class ScanI2CTwoWire : public ScanI2C
 
     concurrency::Lock lock;
 
-    uint16_t getRegisterValue(const RegisterLocation &, ResponseWidth, bool) const;
+    uint16_t getRegisterValue(const RegisterLocation &, ResponseWidth, bool = false) const;
+
+    bool i2cCommandResponseLength(DeviceAddress addr, uint16_t command, uint8_t expectedLength) const;
 
     DeviceType probeOLED(ScanI2C::DeviceAddress) const;
 

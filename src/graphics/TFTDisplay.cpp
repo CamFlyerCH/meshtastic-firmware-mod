@@ -1,5 +1,6 @@
 #include "configuration.h"
 #include "main.h"
+#if USE_TFTDISPLAY
 
 #if ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
@@ -122,6 +123,11 @@ static void rak14014_tpIntHandle(void)
 {
     _rak14014_touch_int = true;
 }
+
+#elif defined(HACKADAY_COMMUNICATOR)
+#include <Arduino_GFX_Library.h>
+Arduino_DataBus *bus = nullptr;
+Arduino_GFX *tft = nullptr;
 
 #elif defined(ST72xx_DE)
 #include <LovyanGFX.hpp>
@@ -422,7 +428,7 @@ static LGFX *tft = nullptr;
 
 #elif defined(ST7789_CS)
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
-#ifdef HELTEC_V4_TFT
+#if defined(HELTEC_V4_TFT) || defined(HELTEC_V4_R8_TFT)
 #include "chsc6x.h"
 #include "lgfx/v1/Touch.hpp"
 namespace lgfx
@@ -444,7 +450,11 @@ class TOUCH_CHSC6X : public ITouch
     bool init(void) override
     {
         if (chsc6xTouch == nullptr) {
+#if (TOUCH_I2C_PORT == 1)
             chsc6xTouch = new chsc6x(&Wire1, TOUCH_SDA_PIN, TOUCH_SCL_PIN, TOUCH_INT_PIN, TOUCH_RST_PIN);
+#else
+            chsc6xTouch = new chsc6x(&Wire, TOUCH_SDA_PIN, TOUCH_SCL_PIN, TOUCH_INT_PIN, TOUCH_RST_PIN);
+#endif
         }
         chsc6xTouch->chsc6x_init();
         return true;
@@ -481,7 +491,7 @@ class LGFX : public lgfx::LGFX_Device
 #if HAS_TOUCHSCREEN
 #if defined(T_WATCH_S3) || defined(ELECROW)
     lgfx::Touch_FT5x06 _touch_instance;
-#elif defined(HELTEC_V4_TFT)
+#elif defined(HELTEC_V4_TFT) || defined(HELTEC_V4_R8_TFT)
     lgfx::TOUCH_CHSC6X _touch_instance;
 #else
     lgfx::Touch_GT911 _touch_instance;
@@ -500,7 +510,11 @@ class LGFX : public lgfx::LGFX_Device
             cfg.freq_write = SPI_FREQUENCY; // SPI clock for transmission (up to 80MHz, rounded to the value obtained by dividing
                                             // 80MHz by an integer)
             cfg.freq_read = SPI_READ_FREQUENCY; // SPI clock when receiving
-            cfg.spi_3wire = false;
+#ifdef SPI_3_WIRE
+            cfg.spi_3wire = SPI_3_WIRE;
+#else
+            cfg.spi_3wire = true;                      // Set to true if reception is done on the MOSI pin
+#endif
             cfg.use_lock = true;               // Set to true to use transaction locking
             cfg.dma_channel = SPI_DMA_CH_AUTO; // SPI_DMA_CH_AUTO; // Set DMA channel to use (0=not use DMA / 1=1ch / 2=ch /
                                                // SPI_DMA_CH_AUTO=auto setting)
@@ -550,8 +564,11 @@ class LGFX : public lgfx::LGFX_Device
             cfg.rgb_order = false;                        // Set to true if the panel's red and blue are swapped
             cfg.dlen_16bit =
                 false;             // Set to true for panels that transmit data length in 16-bit units with 16-bit parallel or SPI
+#if defined(HAS_SDCARD)
             cfg.bus_shared = true; // If the bus is shared with the SD card, set to true (bus control with drawJpgFile etc.)
-
+#else
+            cfg.bus_shared = false;
+#endif
             // Set the following only when the display is shifted with a driver with a variable number of pixels, such as the
             // ST7735 or ILI9163.
             // cfg.memory_width = TFT_WIDTH;   // Maximum width supported by the driver IC
@@ -1133,9 +1150,6 @@ static LGFX *tft = nullptr;
 
 #endif
 
-#if defined(ST7701_CS) || defined(ST7735_CS) || defined(ST7789_CS) || defined(ST7796_CS) || defined(ILI9341_DRIVER) ||           \
-    defined(ILI9342_DRIVER) || defined(RAK14014) || defined(HX8357_CS) || defined(ILI9488_CS) || defined(ST72xx_DE) ||           \
-    (ARCH_PORTDUINO && HAS_SCREEN != 0)
 #include "SPILock.h"
 #include "TFTDisplay.h"
 #include <SPI.h>
@@ -1206,8 +1220,8 @@ void TFTDisplay::display(bool fromBlank)
     bool somethingChanged = false;
 
     // Store colors byte-reversed so that TFT_eSPI doesn't have to swap bytes in a separate step
-    colorTftMesh = (TFT_MESH >> 8) | ((TFT_MESH & 0xFF) << 8);
-    colorTftBlack = (TFT_BLACK >> 8) | ((TFT_BLACK & 0xFF) << 8);
+    colorTftMesh = __builtin_bswap16(TFT_MESH);
+    colorTftBlack = __builtin_bswap16(TFT_BLACK);
 
     y = 0;
     while (y < displayHeight) {
@@ -1271,12 +1285,15 @@ void TFTDisplay::display(bool fromBlank)
                     x_LastPixelUpdate = x;
                 }
             }
-
+#if defined(HACKADAY_COMMUNICATOR)
+            tft->draw16bitBeRGBBitmap(x_FirstPixelUpdate, y, &linePixelBuffer[x_FirstPixelUpdate],
+                                      (x_LastPixelUpdate - x_FirstPixelUpdate + 1), 1);
+#else
             // Step 4: Send the changed pixels on this line to the screen as a single block transfer.
             // This function accepts pixel data MSB first so it can dump the memory straight out the SPI port.
             tft->pushRect(x_FirstPixelUpdate, y, (x_LastPixelUpdate - x_FirstPixelUpdate + 1), 1,
                           &linePixelBuffer[x_FirstPixelUpdate]);
-
+#endif
             somethingChanged = true;
         }
         y++;
@@ -1340,7 +1357,10 @@ void TFTDisplay::sendCommand(uint8_t com)
         display(true);
         if (portduino_config.displayBacklight.pin > 0)
             digitalWrite(portduino_config.displayBacklight.pin, TFT_BACKLIGHT_ON);
-#elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE)
+#elif defined(HACKADAY_COMMUNICATOR)
+        tft->displayOn();
+#elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE) && !defined(HELTEC_MESH_NODE_T096) &&                         \
+    !defined(HELTEC_MESH_NODE_T1)
         tft->wakeup();
         tft->powerSaveOff();
 #endif
@@ -1351,8 +1371,9 @@ void TFTDisplay::sendCommand(uint8_t com)
 #ifdef UNPHONE
         unphone.backlight(true); // using unPhone library
 #endif
-#ifdef RAK14014
-#elif !defined(M5STACK) && !defined(ST7789_CS) // T-Deck gets brightness set in Screen.cpp in the handleSetOn function
+#if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096) || defined(HELTEC_MESH_NODE_T1)
+#elif !defined(M5STACK) && !defined(ST7789_CS) &&                                                                                \
+    !defined(HACKADAY_COMMUNICATOR) // T-Deck gets brightness set in Screen.cpp in the handleSetOn function
         tft->setBrightness(172);
 #endif
         break;
@@ -1364,7 +1385,10 @@ void TFTDisplay::sendCommand(uint8_t com)
         tft->clear();
         if (portduino_config.displayBacklight.pin > 0)
             digitalWrite(portduino_config.displayBacklight.pin, !TFT_BACKLIGHT_ON);
-#elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE)
+#elif defined(HACKADAY_COMMUNICATOR)
+        tft->displayOff();
+#elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE) && !defined(HELTEC_MESH_NODE_T096) &&                         \
+    !defined(HELTEC_MESH_NODE_T1)
         tft->sleep();
         tft->powerSaveOn();
 #endif
@@ -1375,8 +1399,8 @@ void TFTDisplay::sendCommand(uint8_t com)
 #ifdef UNPHONE
         unphone.backlight(false); // using unPhone library
 #endif
-#ifdef RAK14014
-#elif !defined(M5STACK)
+#if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096) || defined(HELTEC_MESH_NODE_T1)
+#elif !defined(M5STACK) && !defined(HACKADAY_COMMUNICATOR)
         tft->setBrightness(0);
 #endif
         break;
@@ -1390,9 +1414,9 @@ void TFTDisplay::sendCommand(uint8_t com)
 
 void TFTDisplay::setDisplayBrightness(uint8_t _brightness)
 {
-#ifdef RAK14014
+#if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096) || defined(HELTEC_MESH_NODE_T1)
     // todo
-#else
+#elif !defined(HACKADAY_COMMUNICATOR)
     tft->setBrightness(_brightness);
     LOG_DEBUG("Brightness is set to value: %i ", _brightness);
 #endif
@@ -1410,7 +1434,7 @@ bool TFTDisplay::hasTouch(void)
 {
 #ifdef RAK14014
     return true;
-#elif !defined(M5STACK)
+#elif !defined(M5STACK) && !defined(HACKADAY_COMMUNICATOR) && !defined(HELTEC_MESH_NODE_T096) && !defined(HELTEC_MESH_NODE_T1)
     return tft->touch() != nullptr;
 #else
     return false;
@@ -1429,7 +1453,7 @@ bool TFTDisplay::getTouch(int16_t *x, int16_t *y)
     } else {
         return false;
     }
-#elif !defined(M5STACK)
+#elif !defined(M5STACK) && !defined(HACKADAY_COMMUNICATOR) && !defined(HELTEC_MESH_NODE_T096) && !defined(HELTEC_MESH_NODE_T1)
     return tft->getTouch(x, y);
 #else
     return false;
@@ -1446,8 +1470,14 @@ bool TFTDisplay::connect()
 {
     concurrency::LockGuard g(spiLock);
     LOG_INFO("Do TFT init");
-#ifdef RAK14014
+#if defined(RAK14014) || defined(HELTEC_MESH_NODE_T096) || defined(HELTEC_MESH_NODE_T1)
     tft = new TFT_eSPI;
+#elif defined(HACKADAY_COMMUNICATOR)
+    bus = new Arduino_ESP32SPI(TFT_DC, TFT_CS, 38 /* SCK */, 21 /* MOSI */, GFX_NOT_DEFINED /* MISO */, HSPI /* spi_num */);
+    tft = new Arduino_NV3007(bus, 40, 0 /* rotation */, false /* IPS */, 142 /* width */, 428 /* height */, 12 /* col offset 1 */,
+                             0 /* row offset 1 */, 14 /* col offset 2 */, 0 /* row offset 2 */, nv3007_279_init_operations,
+                             sizeof(nv3007_279_init_operations));
+
 #else
     tft = new LGFX;
 #endif
@@ -1458,8 +1488,15 @@ bool TFTDisplay::connect()
 #ifdef UNPHONE
     unphone.backlight(true); // using unPhone library
 #endif
-
+#ifdef HACKADAY_COMMUNICATOR
+    bool beginStatus = tft->begin();
+    if (beginStatus)
+        LOG_DEBUG("TFT Success!");
+    else
+        LOG_ERROR("TFT Fail!");
+#else
     tft->init();
+#endif
 
 #if defined(M5STACK)
     tft->setRotation(0);
@@ -1470,7 +1507,7 @@ bool TFTDisplay::connect()
     ft6336u.begin();
     pinMode(SCREEN_TOUCH_INT, INPUT_PULLUP);
     attachInterrupt(digitalPinToInterrupt(SCREEN_TOUCH_INT), rak14014_tpIntHandle, FALLING);
-#elif defined(T_DECK) || defined(PICOMPUTER_S3) || defined(CHATTER_2)
+#elif defined(T_DECK) || defined(PICOMPUTER_S3) || defined(CHATTER_2) || defined(HELTEC_MESH_NODE_T096)
     tft->setRotation(1); // T-Deck has the TFT in landscape
 #elif defined(T_WATCH_S3)
     tft->setRotation(2); // T-Watch S3 left-handed orientation
@@ -1492,4 +1529,4 @@ bool TFTDisplay::connect()
     return true;
 }
 
-#endif
+#endif // USE_TFTDISPLAY

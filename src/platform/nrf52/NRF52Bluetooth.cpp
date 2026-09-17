@@ -1,6 +1,7 @@
 #include "NRF52Bluetooth.h"
 #include "BLEDfuSecure.h"
 #include "BluetoothCommon.h"
+#include "HardwareRNG.h"
 #include "PowerFSM.h"
 #include "configuration.h"
 #include "main.h"
@@ -19,7 +20,7 @@ static BLEBas blebas; // BAS (Battery Service) helper class instance
 #ifndef BLE_DFU_SECURE
 static BLEDfu bledfu; // DFU software update helper service
 #else
-static BLEDfuSecure bledfusecure;                                             // DFU software update helper service
+static BLEDfuSecure bledfusecure; // DFU software update helper service
 #endif
 
 // This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in
@@ -32,6 +33,7 @@ static uint8_t toRadioBytes[meshtastic_ToRadio_size];
 static uint8_t lastToRadio[MAX_TO_FROM_RADIO_SIZE];
 
 static uint16_t connectionHandle;
+static bool passkeyShowing;
 
 class BluetoothPhoneAPI : public PhoneAPI
 {
@@ -86,6 +88,16 @@ void onDisconnect(uint16_t conn_handle, uint8_t reason)
     // Notify UI (or any other interested firmware components)
     meshtastic::BluetoothStatus newStatus(meshtastic::BluetoothStatus::ConnectionState::DISCONNECTED);
     bluetoothStatus->updateStatus(&newStatus);
+
+#if HAS_SCREEN
+    // If a pairing prompt is active, make sure we dismiss it on disconnect/cancel/failure paths.
+    if (passkeyShowing) {
+        passkeyShowing = false;
+        if (screen) {
+            screen->endAlert();
+        }
+    }
+#endif
 }
 void onCccd(uint16_t conn_hdl, BLECharacteristic *chr, uint16_t cccd_value)
 {
@@ -119,7 +131,7 @@ void startAdv(void)
     Bluefruit.Advertising.addService(meshBleService);
     /* Start Advertising
      * - Enable auto advertising if disconnected
-     * - Interval:  fast mode = 20 ms, slow mode = 152.5 ms
+     * - Interval:  fast mode = 20 ms, slow mode = 417,5 ms
      * - Timeout for fast mode is 30 seconds
      * - Start(timeout) with timeout = 0 will advertise forever (until connected)
      *
@@ -127,7 +139,7 @@ void startAdv(void)
      * https://developer.apple.com/library/content/qa/qa1931/_index.html
      */
     Bluefruit.Advertising.restartOnDisconnect(true);
-    Bluefruit.Advertising.setInterval(32, 244); // in unit of 0.625 ms
+    Bluefruit.Advertising.setInterval(32, 668); // in unit of 0.625 ms
     Bluefruit.Advertising.setFastTimeout(30);   // number of seconds in fast mode
     Bluefruit.Advertising.start(0); // 0 = Don't stop advertising after n seconds.  FIXME, we should stop advertising after X
 }
@@ -240,6 +252,41 @@ int NRF52Bluetooth::getRssi()
 {
     return 0; // FIXME figure out where to source this
 }
+
+// Valid BLE TX power levels as per nRF52840 Product Specification are: "-20 to +8 dBm TX power, configurable in 4 dB steps".
+// See https://docs.nordicsemi.com/bundle/ps_nrf52840/page/keyfeatures_html5.html
+#define VALID_BLE_TX_POWER(x)                                                                                                    \
+    ((x) == -20 || (x) == -16 || (x) == -12 || (x) == -8 || (x) == -4 || (x) == 0 || (x) == 4 || (x) == 8)
+
+void NRF52Bluetooth::restoreTxPower()
+{
+#if defined(NRF52_BLE_TX_POWER) && VALID_BLE_TX_POWER(NRF52_BLE_TX_POWER)
+    Bluefruit.setTxPower(NRF52_BLE_TX_POWER);
+#else
+    // Bluefruit.begin() default.
+    Bluefruit.setTxPower(0);
+#endif
+}
+
+void NRF52Bluetooth::restoreSecurityState()
+{
+    if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
+        Bluefruit.Security.setPairPasskeyCallback(nullptr);
+        Bluefruit.Security.setPairCompleteCallback(nullptr);
+        Bluefruit.Security.setSecuredCallback(nullptr);
+        Bluefruit.Security.setIOCaps(false, false, false);
+        // setPairPasskeyCallback() enables MITM even when clearing the callback.
+        Bluefruit.Security.setMITM(false);
+        return;
+    }
+
+    Bluefruit.Security.setIOCaps(true, false, false);
+    Bluefruit.Security.setMITM(true);
+    Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onPairingPasskey);
+    Bluefruit.Security.setPairCompleteCallback(NRF52Bluetooth::onPairingCompleted);
+    Bluefruit.Security.setSecuredCallback(NRF52Bluetooth::onConnectionSecured);
+}
+
 void NRF52Bluetooth::setup()
 {
     // Initialise the Bluefruit module
@@ -251,20 +298,22 @@ void NRF52Bluetooth::setup()
     Bluefruit.Advertising.stop();
     Bluefruit.Advertising.clearData();
     Bluefruit.ScanResponse.clearData();
+    restoreTxPower();
     if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
-        configuredPasskey = config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN
-                                ? config.bluetooth.fixed_pin
-                                : random(100000, 999999);
+        if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN) {
+            configuredPasskey = config.bluetooth.fixed_pin;
+        } else {
+            uint32_t hwrand = 0;
+            HardwareRNG::fill(reinterpret_cast<uint8_t *>(&hwrand), sizeof(hwrand));
+            configuredPasskey = hwrand % 900000u + 100000u;
+        }
         auto pinString = std::to_string(configuredPasskey);
-        LOG_INFO("Bluetooth pin set to '%i'", configuredPasskey);
+        LOG_DEBUG("Bluetooth pin configured");
         Bluefruit.Security.setPIN(pinString.c_str());
-        Bluefruit.Security.setIOCaps(true, false, false);
-        Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onPairingPasskey);
-        Bluefruit.Security.setPairCompleteCallback(NRF52Bluetooth::onPairingCompleted);
-        Bluefruit.Security.setSecuredCallback(NRF52Bluetooth::onConnectionSecured);
+        restoreSecurityState();
         meshBleService.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
     } else {
-        Bluefruit.Security.setIOCaps(false, false, false);
+        restoreSecurityState();
         meshBleService.setPermission(SECMODE_OPEN, SECMODE_OPEN);
     }
     // Set the advertised device name (keep it short!)
@@ -272,6 +321,29 @@ void NRF52Bluetooth::setup()
     // Set the connect/disconnect callback handlers
     Bluefruit.Periph.setConnectCallback(onConnect);
     Bluefruit.Periph.setDisconnectCallback(onDisconnect);
+
+    // Do not change Slave Latency to value other than 0 !!!
+    // There is probably a bug in SoftDevice + certain Apple iOS versions being
+    // brain damaged causing connectivity problems.
+
+    // On one side it seems SoftDevice is using SlaveLatency value even
+    // if connection parameter negotation failed and phone sees it as connectivity errors.
+
+    // On the other hand Apple can randomly refuse any parameter negotiation and shutdown connection
+    // even if you meet Apple Developer Guidelines for BLE devices. Because f* you, that's why.
+
+    // While this API call sets preferred connection parameters (PPCP) - many phones ignore it (yeah) and it seems SoftDevice
+    // will try to renegotiate connection parameters based on those values after phone connection.
+    // So those are relatively safe values so Apple braindead firmware won't get angry and at least we may try
+    // to negotiate some longer connection interval to save battery.
+
+    // See https://github.com/meshtastic/firmware/pull/8858 for measurements.  We are dealing with microamp savings anyway so not
+    // worth dying on a hill here.
+
+    Bluefruit.Periph.setConnSlaveLatency(0);
+    // 1.25 ms units - so min, max is 15, 100 ms range.
+    Bluefruit.Periph.setConnInterval(12, 80);
+
 #ifndef BLE_DFU_SECURE
     bledfu.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
     bledfu.begin(); // Install the DFU helper
@@ -299,8 +371,12 @@ void NRF52Bluetooth::setup()
 }
 void NRF52Bluetooth::resumeAdvertising()
 {
+    LOG_DEBUG("Resume NRF52 BLE advertising");
+    // shutdown() swaps security callbacks, so restore BLE state before advertising.
+    restoreSecurityState();
+    restoreTxPower();
     Bluefruit.Advertising.restartOnDisconnect(true);
-    Bluefruit.Advertising.setInterval(32, 244); // in unit of 0.625 ms
+    Bluefruit.Advertising.setInterval(32, 668); // in unit of 0.625 ms
     Bluefruit.Advertising.setFastTimeout(30);   // number of seconds in fast mode
     Bluefruit.Advertising.start(0);
 }
@@ -323,9 +399,7 @@ void NRF52Bluetooth::onConnectionSecured(uint16_t conn_handle)
 }
 bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passkey[6], bool match_request)
 {
-    char passkey1[4] = {passkey[0], passkey[1], passkey[2], '\0'};
-    char passkey2[4] = {passkey[3], passkey[4], passkey[5], '\0'};
-    LOG_INFO("BLE pair process started with passkey %s %s", passkey1, passkey2);
+    LOG_INFO("BLE pair process started: match_request=%i", match_request);
     powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
 
     // Get passkey as string
@@ -368,14 +442,9 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
         });
     }
 #endif
-    if (match_request) {
-        uint32_t start_time = millis();
-        while (millis() < start_time + 30000) {
-            if (!Bluefruit.connected(conn_handle))
-                break;
-        }
-    }
-    LOG_INFO("BLE passkey pair: match_request=%i", match_request);
+    passkeyShowing = true;
+
+    // Pairing completion or disconnect dismisses the passkey UI; blocking here stalls BLE event processing.
     return true;
 }
 
@@ -384,6 +453,7 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
 // On NRF52Bluetooth::shutdown, we change the pairing callback to this method, to aggressively refuse any connection attempts.
 bool NRF52Bluetooth::onUnwantedPairing(uint16_t conn_handle, uint8_t const passkey[6], bool match_request)
 {
+    LOG_WARN("Rejecting BLE pairing (onUnwantedPairing) - should only fire while Bluetooth is disabled");
     NRF52Bluetooth::disconnect();
     return false;
 }
@@ -419,6 +489,7 @@ void NRF52Bluetooth::onPairingCompleted(uint16_t conn_handle, uint8_t auth_statu
     }
 
     // Todo: migrate this display code back into Screen class, and observe bluetoothStatus
+    passkeyShowing = false;
     if (screen) {
         screen->endAlert();
     }
