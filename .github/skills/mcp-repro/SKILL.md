@@ -1,8 +1,8 @@
 ---
-mode: agent
-description: Re-run a specific test N times to triage flakes; diff firmware logs between passes and failures (Copilot equivalent of the Claude Code /repro slash command)
+name: mcp-repro
+description: "Re-run a specific test N times to triage flakes; diff firmware logs between passes and failures (Copilot equivalent of the Claude Code /repro slash command)"
+disable-model-invocation: true
 ---
-
 # `/mcp-repro` — flakiness triage for one test
 
 Equivalent of `.claude/commands/repro.md`. Use when the operator says "that one test is flaky — dig in", "repro the direct_with_ack failure", "why does X sometimes fail?".

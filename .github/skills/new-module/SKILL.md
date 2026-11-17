@@ -1,3 +1,8 @@
+---
+name: new-module
+description: new-module
+disable-model-invocation: true
+---
 # New Meshtastic Module
 
 Guide for developing a new Meshtastic firmware module.

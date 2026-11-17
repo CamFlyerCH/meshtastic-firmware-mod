@@ -1,8 +1,8 @@
 ---
-mode: agent
+name: mcp-diagnose
 description: Device health report via the meshtastic MCP tools (Copilot equivalent of the Claude Code /diagnose slash command)
+disable-model-invocation: true
 ---
-
 # `/mcp-diagnose` — device health report
 
 Equivalent of `.claude/commands/diagnose.md`. Use when the operator asks to "check the devices", "what's the mesh looking like", "is nrf52 alive", etc.

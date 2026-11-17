@@ -1,8 +1,8 @@
 ---
-mode: agent
+name: mcp-test
 description: Run the mcp-server test suite and interpret results (Copilot equivalent of the Claude Code /test slash command)
+disable-model-invocation: true
 ---
-
 # `/mcp-test` — mcp-server test runner with interpretation
 
 Equivalent of the Claude Code `/test` slash command in `.claude/commands/test.md`. Use this when the operator asks you to "run the tests", "check the mcp test suite", "run the mesh tests", etc.

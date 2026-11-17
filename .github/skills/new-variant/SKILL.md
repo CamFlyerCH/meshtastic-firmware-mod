@@ -1,3 +1,8 @@
+---
+name: new-variant
+description: new-variant
+disable-model-invocation: true
+---
 # New Hardware Variant
 
 Guide for adding a new Meshtastic hardware variant to the firmware.

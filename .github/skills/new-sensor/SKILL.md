@@ -1,3 +1,8 @@
+---
+name: new-sensor
+description: new-sensor
+disable-model-invocation: true
+---
 # New Telemetry Sensor
 
 Guide for adding a new I2C telemetry sensor driver to Meshtastic firmware.
