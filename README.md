@@ -23,5 +23,7 @@ platformio run -e heltec-v3
 ```
 
 The build produces firmware images under `.pio/build/heltec-v3/`. Building does not flash a connected device.
+Fork-specific router diagnostics retain their original Info/Warning levels and are compiled out by default. Enable
+them when building with `RADIO_DEBUG=1`.
 
 For general Meshtastic firmware development and device setup, see the [official documentation](https://meshtastic.org/docs/).

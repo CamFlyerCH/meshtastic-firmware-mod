@@ -259,6 +259,7 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
                   meshtastic_PortNum_PRIVATE_APP, meshtastic_PortNum_DETECTION_SENSOR_APP,
                   meshtastic_PortNum_RANGE_TEST_APP, meshtastic_PortNum_REMOTE_HARDWARE_APP,
                   meshtastic_PortNum_TELEMETRY_APP, meshtastic_PortNum_NEIGHBORINFO_APP)) {
+        LOG_WARN_RADIO("JM Mod: Don't retransmit message with portnum %d from !%08x", p->decoded.portnum, p->from);
         Router::cancelSending(p->from, p->id);
         return false;
     }

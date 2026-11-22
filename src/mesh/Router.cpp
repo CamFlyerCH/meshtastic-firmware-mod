@@ -558,14 +558,21 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     }
 #endif
 
+    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+        LOG_INFO_RADIO("JM Mod: TXDATA,%d,!%08x,!%08x,%d,%d,0x%x", p->decoded.portnum, p->from, p->to, p->hop_start,
+                       p->hop_limit, p->channel);
+    }
+
     // Stock uses the configured limit; this fork forces selected default-channel broadcasts to zero.
-    if (isFromUs(p) && isBroadcast(p->to) && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+    if (DO_ZERO_HOP_TELEMETRY && isFromUs(p) && isBroadcast(p->to) &&
+        p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
         channels.isDefaultChannel(p->channel) &&
         IS_ONE_OF(p->decoded.portnum, meshtastic_PortNum_AUDIO_APP, meshtastic_PortNum_DETECTION_SENSOR_APP,
                   meshtastic_PortNum_PAXCOUNTER_APP, meshtastic_PortNum_SERIAL_APP, meshtastic_PortNum_RANGE_TEST_APP,
                   meshtastic_PortNum_TELEMETRY_APP, meshtastic_PortNum_ZPS_APP, meshtastic_PortNum_NEIGHBORINFO_APP,
                   meshtastic_PortNum_POWERSTRESS_APP, meshtastic_PortNum_PRIVATE_APP)) {
         p->hop_limit = 0;
+        LOG_INFO_RADIO("JM Mod: Changed hop_limit to 0 for default-channel broadcast portnum %d", p->decoded.portnum);
     }
     // END FORK CUSTOMIZATION
 
@@ -1587,17 +1594,28 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
 #endif
 
         // Stock has no >5 cap; this fork drops excessive-hop packets before local handling.
+        LOG_INFO_RADIO("JM Mod: RXDATA,%d,!%08x,!%08x,%d,%d,0x%x", p->decoded.portnum, p->from, p->to, p->hop_start,
+                       p->hop_limit, p->channel);
         const auto rebroadcastMode = config.device.rebroadcast_mode;
         if (!skipHandle && src == RX_SRC_RADIO && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
             p->hop_start > REBROADCAST_HOP_START_LIMIT &&
             IS_ONE_OF(rebroadcastMode, meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY,
-                      meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY) &&
-            !isToUs(p)) {
-            const bool knownNonDefaultChannel =
-                p->channel < channels.getNumChannels() && !channels.isDefaultChannel(p->channel);
-            if (!knownNonDefaultChannel) {
-                cancelSending(p->from, p->id);
-                skipHandle = true;
+                      meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY)) {
+            if (isToUs(p)) {
+                LOG_INFO_RADIO("JM Mod: Message is for us, keep it. Portnum %d from !%08x", p->decoded.portnum,
+                               p->from);
+            } else {
+                const bool knownNonDefaultChannel =
+                    p->channel < channels.getNumChannels() && !channels.isDefaultChannel(p->channel);
+                if (knownNonDefaultChannel) {
+                    LOG_INFO_RADIO("JM Mod: Keep packet on known non-default channel %d from !%08x to !%08x",
+                                   p->channel, p->from, p->to);
+                } else {
+                    LOG_WARN_RADIO("JM Mod: Drop packet from !%08x with hop_start %d (> %d)", p->from, p->hop_start,
+                                   REBROADCAST_HOP_START_LIMIT);
+                    cancelSending(p->from, p->id);
+                    skipHandle = true;
+                }
             }
         }
         // END FORK CUSTOMIZATION
