@@ -558,6 +558,15 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     }
 #endif
 
+    if (isFromUs(p) && isBroadcast(p->to) && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+        channels.isDefaultChannel(p->channel) &&
+        IS_ONE_OF(p->decoded.portnum, meshtastic_PortNum_AUDIO_APP, meshtastic_PortNum_DETECTION_SENSOR_APP,
+                  meshtastic_PortNum_PAXCOUNTER_APP, meshtastic_PortNum_SERIAL_APP, meshtastic_PortNum_RANGE_TEST_APP,
+                  meshtastic_PortNum_TELEMETRY_APP, meshtastic_PortNum_ZPS_APP, meshtastic_PortNum_NEIGHBORINFO_APP,
+                  meshtastic_PortNum_POWERSTRESS_APP, meshtastic_PortNum_PRIVATE_APP)) {
+        p->hop_limit = 0;
+    }
+
     // If we are the original transmitter, set the hop limit with which we start
     if (isFromUs(p))
         p->hop_start = p->hop_limit;
@@ -1574,6 +1583,20 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
             skipHandle = true;
         }
 #endif
+
+        const auto rebroadcastMode = config.device.rebroadcast_mode;
+        if (!skipHandle && src == RX_SRC_RADIO && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+            p->hop_start > REBROADCAST_HOP_START_LIMIT &&
+            IS_ONE_OF(rebroadcastMode, meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY,
+                      meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY) &&
+            !isToUs(p)) {
+            const bool knownNonDefaultChannel =
+                p->channel < channels.getNumChannels() && !channels.isDefaultChannel(p->channel);
+            if (!knownNonDefaultChannel) {
+                cancelSending(p->from, p->id);
+                skipHandle = true;
+            }
+        }
 
         // Neighbor info module is disabled, ignore expensive neighbor info packets
         if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&

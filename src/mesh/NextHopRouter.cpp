@@ -250,6 +250,18 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
     }
 #endif
 
+    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+        IS_ONE_OF(config.device.rebroadcast_mode, meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY,
+                  meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY) &&
+        IS_ONE_OF(p->decoded.portnum, meshtastic_PortNum_ATAK_FORWARDER, meshtastic_PortNum_ATAK_PLUGIN,
+                  meshtastic_PortNum_PAXCOUNTER_APP, meshtastic_PortNum_IP_TUNNEL_APP, meshtastic_PortNum_AUDIO_APP,
+                  meshtastic_PortNum_PRIVATE_APP, meshtastic_PortNum_DETECTION_SENSOR_APP,
+                  meshtastic_PortNum_RANGE_TEST_APP, meshtastic_PortNum_REMOTE_HARDWARE_APP,
+                  meshtastic_PortNum_TELEMETRY_APP, meshtastic_PortNum_NEIGHBORINFO_APP)) {
+        Router::cancelSending(p->from, p->id);
+        return false;
+    }
+
     // Check if traffic management wants to exhaust this packet's hops
     bool exhaustHops = false;
 #if HAS_TRAFFIC_MANAGEMENT

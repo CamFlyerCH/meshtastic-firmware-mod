@@ -35,6 +35,30 @@ void tearDown(void)
     pipelineHarnessTearDown();
 }
 
+static meshtastic_MeshPacket makeChannelPacket(NodeNum from, NodeNum to, meshtastic_PortNum port, PacketId id,
+                                               uint8_t hopStart, uint8_t hopLimit, ChannelIndex channel = 0)
+{
+    meshtastic_MeshPacket p = makeDecoded(from, to, port, SMALL_PAYLOAD);
+    p.id = id;
+    p.channel = channel;
+    p.hop_start = hopStart;
+    p.hop_limit = hopLimit;
+    p.transport_mechanism = meshtastic_MeshPacket_TransportMechanism_TRANSPORT_LORA;
+    return channelEncode(p);
+}
+
+static void installSecondaryChannel()
+{
+    meshtastic_Channel secondary = meshtastic_Channel_init_zero;
+    secondary.index = 1;
+    secondary.role = meshtastic_Channel_Role_SECONDARY;
+    secondary.has_settings = true;
+    strncpy(secondary.settings.name, "private", sizeof(secondary.settings.name) - 1);
+    secondary.settings.psk.size = 16;
+    memset(secondary.settings.psk.bytes, 0xA5, secondary.settings.psk.size);
+    channels.setChannel(secondary);
+}
+
 // Remote admin from the operator's node to a node behind us, both of them known to us. This is
 // what a router in the field does all day. Anyone who makes this assertion fail in any mode but
 // NONE is turning a stock ROUTER (whose default is CORE_PORTNUMS_ONLY) into a black hole for
@@ -315,6 +339,155 @@ void test_relay_decision_ignores_signature_policy(void)
     }
 }
 
+// The selected broadcast types start at zero only on the default channel; hop_start must match hop_limit.
+void test_selected_local_broadcasts_start_with_zero_hops_on_default_channel(void)
+{
+    const meshtastic_PortNum zeroHopPorts[] = {
+        meshtastic_PortNum_AUDIO_APP,
+        meshtastic_PortNum_DETECTION_SENSOR_APP,
+        meshtastic_PortNum_PAXCOUNTER_APP,
+        meshtastic_PortNum_SERIAL_APP,
+        meshtastic_PortNum_RANGE_TEST_APP,
+        meshtastic_PortNum_TELEMETRY_APP,
+        meshtastic_PortNum_ZPS_APP,
+        meshtastic_PortNum_NEIGHBORINFO_APP,
+        meshtastic_PortNum_POWERSTRESS_APP,
+        meshtastic_PortNum_PRIVATE_APP,
+    };
+    for (const auto port : zeroHopPorts) {
+        pipelineRadio->reset();
+        meshtastic_MeshPacket p = makeDecoded(LOCAL_NODE, NODENUM_BROADCAST, port, SMALL_PAYLOAD);
+        p.hop_limit = 3;
+        TEST_ASSERT_EQUAL(ERRNO_OK, pipelineRouter->send(packetPool.allocCopy(p)));
+        TEST_ASSERT_EQUAL(1, pipelineRadio->sendCalls);
+        TEST_ASSERT_NOT_NULL(pipelineRadio->lastSent());
+        TEST_ASSERT_EQUAL_MESSAGE(0, pipelineRadio->lastSent()->hop_limit,
+                                  "selected default-channel broadcasts use zero hops");
+        TEST_ASSERT_EQUAL(0, pipelineRadio->lastSent()->hop_start);
+    }
+
+    pipelineRadio->reset();
+    meshtastic_MeshPacket text =
+        makeDecoded(LOCAL_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP, SMALL_PAYLOAD);
+    text.hop_limit = 3;
+    TEST_ASSERT_EQUAL(ERRNO_OK, pipelineRouter->send(packetPool.allocCopy(text)));
+    TEST_ASSERT_EQUAL(3, pipelineRadio->lastSent()->hop_limit);
+    TEST_ASSERT_EQUAL(3, pipelineRadio->lastSent()->hop_start);
+
+    pipelineRadio->reset();
+    installSecondaryChannel();
+    meshtastic_MeshPacket telemetry =
+        makeDecoded(LOCAL_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TELEMETRY_APP, SMALL_PAYLOAD);
+    telemetry.channel = 1;
+    telemetry.hop_limit = 3;
+    TEST_ASSERT_EQUAL(ERRNO_OK, pipelineRouter->send(packetPool.allocCopy(telemetry)));
+    TEST_ASSERT_EQUAL(3, pipelineRadio->lastSent()->hop_limit);
+    TEST_ASSERT_EQUAL(3, pipelineRadio->lastSent()->hop_start);
+}
+
+// LOCAL_ONLY/KNOWN_ONLY reject excessive default-channel hops without blocking private-channel or local delivery.
+void test_excess_hop_start_is_dropped_only_for_default_channel_forwarding(void)
+{
+    installSecondaryChannel();
+    mockNodeDB->addNode(ADMIN_NODE);
+    mockNodeDB->markHasUser(ADMIN_NODE);
+
+    const meshtastic_Config_DeviceConfig_RebroadcastMode modes[] = {
+        meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY,
+        meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY,
+    };
+    for (const auto mode : modes) {
+        pipelineRadio->reset();
+        pipelineRouting->reset();
+        config.device.rebroadcast_mode = mode;
+        const PacketId defaultChannelId = 0xADB00010 + static_cast<uint32_t>(mode);
+        pipelineRadio->holdInTxQueue(ADMIN_NODE, defaultChannelId);
+        runPipelineIngress(makeChannelPacket(ADMIN_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP,
+                                             defaultChannelId,
+                                             REBROADCAST_HOP_START_LIMIT + 1, 2));
+        TEST_ASSERT_EQUAL_MESSAGE(0, pipelineRadio->sendCalls,
+                                  "excess hop_start on the default channel is discarded");
+        TEST_ASSERT_EQUAL_MESSAGE(0, pipelineRadio->txQueueSize(), "discarded packet cancels queued retransmission");
+        TEST_ASSERT_EQUAL_MESSAGE(0, drainPhoneQueue(), "discarded packet must not reach local consumers");
+
+        pipelineRadio->reset();
+        pipelineRouting->reset();
+        runPipelineIngress(makeChannelPacket(ADMIN_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP,
+                                             0xADB00110 + static_cast<uint32_t>(mode),
+                                             REBROADCAST_HOP_START_LIMIT + 1, 2, 1));
+        TEST_ASSERT_EQUAL_MESSAGE(1, pipelineRadio->sendCalls,
+                                  "excess hop_start is allowed on a known private channel");
+        drainPhoneQueue();
+
+        pipelineRadio->reset();
+        pipelineRouting->reset();
+        runPipelineIngress(makeChannelPacket(ADMIN_NODE, LOCAL_NODE, meshtastic_PortNum_TEXT_MESSAGE_APP,
+                                             0xADB00210 + static_cast<uint32_t>(mode),
+                                             REBROADCAST_HOP_START_LIMIT + 1, 2));
+        TEST_ASSERT_EQUAL_MESSAGE(0, pipelineRadio->sendCalls, "a packet addressed to us is not discarded");
+        TEST_ASSERT_EQUAL_MESSAGE(1, drainPhoneQueue(),
+                                  "a packet addressed to us still reaches local consumers");
+
+        pipelineRadio->reset();
+        pipelineRouting->reset();
+        runPipelineIngress(makeChannelPacket(ADMIN_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TEXT_MESSAGE_APP,
+                                             0xADB00310 + static_cast<uint32_t>(mode),
+                                             REBROADCAST_HOP_START_LIMIT, 2));
+        TEST_ASSERT_EQUAL_MESSAGE(1, pipelineRadio->sendCalls, "the configured hop_start boundary remains allowed");
+        drainPhoneQueue();
+    }
+}
+
+// Port filtering stops rebroadcasts and queued retransmits while preserving local delivery.
+void test_selected_ports_are_not_rebroadcast_in_local_or_known_only_mode(void)
+{
+    const meshtastic_PortNum ports[] = {
+        meshtastic_PortNum_ATAK_FORWARDER,
+        meshtastic_PortNum_ATAK_PLUGIN,
+        meshtastic_PortNum_IP_TUNNEL_APP,
+        meshtastic_PortNum_PAXCOUNTER_APP,
+        meshtastic_PortNum_AUDIO_APP,
+        meshtastic_PortNum_PRIVATE_APP,
+        meshtastic_PortNum_DETECTION_SENSOR_APP,
+        meshtastic_PortNum_RANGE_TEST_APP,
+        meshtastic_PortNum_REMOTE_HARDWARE_APP,
+        meshtastic_PortNum_TELEMETRY_APP,
+        meshtastic_PortNum_NEIGHBORINFO_APP,
+    };
+    mockNodeDB->addNode(ADMIN_NODE);
+    mockNodeDB->markHasUser(ADMIN_NODE);
+    moduleConfig.has_neighbor_info = true;
+    moduleConfig.neighbor_info.enabled = true;
+    const meshtastic_Config_DeviceConfig_RebroadcastMode modes[] = {
+        meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY,
+        meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY,
+    };
+    for (const auto mode : modes) {
+        config.device.rebroadcast_mode = mode;
+        for (size_t i = 0; i < sizeof(ports) / sizeof(ports[0]); i++) {
+            pipelineRadio->reset();
+            pipelineRouting->reset();
+            const PacketId id = 0xADB10020 + static_cast<uint32_t>(mode) * 0x10 + i;
+            pipelineRadio->holdInTxQueue(ADMIN_NODE, id);
+            runPipelineIngress(makeChannelPacket(ADMIN_NODE, NODENUM_BROADCAST, ports[i],
+                                                 id, 1, 2));
+            TEST_ASSERT_EQUAL_MESSAGE(0, pipelineRadio->sendCalls, "selected port must not be rebroadcast");
+            TEST_ASSERT_EQUAL_MESSAGE(0, pipelineRadio->txQueueSize(),
+                                      "suppression cancels an already queued retransmission");
+            TEST_ASSERT_EQUAL_MESSAGE(1, drainPhoneQueue(), "rebroadcast suppression must preserve local delivery");
+        }
+    }
+
+    pipelineRadio->reset();
+    pipelineRouting->reset();
+    config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
+    runPipelineIngress(makeChannelPacket(ADMIN_NODE, NODENUM_BROADCAST, meshtastic_PortNum_TELEMETRY_APP,
+                                         0xADB10200, 1, 2));
+    TEST_ASSERT_EQUAL_MESSAGE(1, pipelineRadio->sendCalls,
+                              "selected ports remain relayable outside LOCAL_ONLY and KNOWN_ONLY");
+    drainPhoneQueue();
+}
+
 void setup()
 {
     pipelineHarnessCreate();
@@ -330,6 +503,9 @@ void setup()
     RUN_TEST(test_opaque_relay_header_gates_hold);
     RUN_TEST(test_opaque_relay_carries_a_frame_once_unless_the_originator_repeats_it);
     RUN_TEST(test_relay_decision_ignores_signature_policy);
+    RUN_TEST(test_selected_local_broadcasts_start_with_zero_hops_on_default_channel);
+    RUN_TEST(test_excess_hop_start_is_dropped_only_for_default_channel_forwarding);
+    RUN_TEST(test_selected_ports_are_not_rebroadcast_in_local_or_known_only_mode);
     const int result = UNITY_END();
     pipelineHarnessDestroy();
     exit(result);
