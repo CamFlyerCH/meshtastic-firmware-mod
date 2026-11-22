@@ -1,40 +1,27 @@
-<div align="center" markdown="1">
+# Meshtastic Firmware Mod
 
-<img src=".github/meshtastic_logo.png" alt="Meshtastic Logo" width="80"/>
-<h1>Meshtastic Firmware</h1>
+This is the personal, experimental firmware fork maintained by **CamFlyerCH**. It is based on the official [Meshtastic firmware](https://github.com/meshtastic/firmware), an open-source LoRa mesh networking project. This fork is not an official Meshtastic release or supported distribution.
 
-![GitHub release downloads](https://img.shields.io/github/downloads/meshtastic/firmware/total)
-[![CI](https://img.shields.io/github/actions/workflow/status/meshtastic/firmware/main_matrix.yml?branch=master&label=actions&logo=github&color=yellow)](https://github.com/meshtastic/firmware/actions/workflows/ci.yml)
-[![CLA assistant](https://cla-assistant.io/readme/badge/meshtastic/firmware)](https://cla-assistant.io/meshtastic/firmware)
-[![Fiscal Contributors](https://opencollective.com/meshtastic/tiers/badge.svg?label=Fiscal%20Contributors&color=deeppink)](https://opencollective.com/meshtastic/)
-[![Vercel](https://img.shields.io/static/v1?label=Powered%20by&message=Vercel&style=flat&logo=vercel&color=000000)](https://vercel.com?utm_source=meshtastic&utm_campaign=oss)
-[![MemBrowse](https://membrowse.com/badge.svg)](https://membrowse.com/public/meshtastic/firmware)
+The purpose of this repository is to try router and mesh-behavior changes on current upstream firmware while keeping the earlier `master` branch available. The `develop` branch is the current experiment branch, based on upstream `develop`. Board definitions and PlatformIO configuration on that branch are intended to follow upstream unless explicitly changed.
 
-<a href="https://trendshift.io/repositories/5524" target="_blank"><img src="https://trendshift.io/api/badge/repositories/5524" alt="meshtastic%2Ffirmware | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+## Fork-specific router behavior
 
-</div>
+The `develop` branch currently adds these routing policies:
 
-</div>
+1. **Hop-start limit in `LOCAL_ONLY` and `KNOWN_ONLY`:** successfully decoded radio packets with `hop_start > 5` are discarded when they are not addressed to this device and arrive on the default or an unknown channel. This applies to every decoded port type; addressed packets and known non-default channels are exempt.
+2. **Selected ports are not rebroadcast in those modes:** ATAK Forwarder/Plugin, PAXCOUNTER, IP Tunnel, Audio, Private, Detection Sensor, Range Test, Remote Hardware, Telemetry, and NeighborInfo packets are not relayed. This does not block their local handling or delivery to the phone.
+3. **Selected local broadcasts use zero hops on the default channel:** Audio, Detection Sensor, PAXCOUNTER, Serial, Range Test, Telemetry, ZPS, NeighborInfo, Powerstress, and Private broadcasts start with `hop_limit = 0` and `hop_start = 0`. This overrides the configured hop limit for those packets; there is no separate runtime toggle for this fork behavior.
 
-<div align="center">
-	<a href="https://meshtastic.org">Website</a>
-	-
-	<a href="https://meshtastic.org/docs/">Documentation</a>
-</div>
+The original firmware routing remains the foundation. Fork-specific code is marked inline in the affected source files so it can be distinguished from upstream logic.
 
-## Overview
+## Build
 
-This repository contains the official device firmware for Meshtastic, an open-source LoRa mesh networking project designed for long-range, low-power communication without relying on internet or cellular infrastructure. The firmware supports various hardware platforms, including ESP32, nRF52, RP2040/RP2350, and Linux-based devices.
+This project uses PlatformIO with the pioarduino ESP32 platform configured for the Heltec V3 (`heltec-v3`). In VS Code, run the **pioarduino: Build** task. From a terminal with PlatformIO available, run:
 
-Meshtastic enables text messaging, location sharing, and telemetry over a decentralized mesh network, making it ideal for outdoor adventures, emergency preparedness, and remote operations.
+```powershell
+platformio run -e heltec-v3
+```
 
-### Get Started
+The build produces firmware images under `.pio/build/heltec-v3/`. Building does not flash a connected device.
 
-- 🔧 **[Building Instructions](https://meshtastic.org/docs/development/firmware/build)** - Learn how to compile the firmware from source.
-- ⚡ **[Flashing Instructions](https://meshtastic.org/docs/getting-started/flashing-firmware/)** - Install or update the firmware on your device.
-
-Join our community and help improve Meshtastic! 🚀
-
-## Stats
-
-![Alt](https://repobeats.axiom.co/api/embed/8025e56c482ec63541593cc5bd322c19d5c0bdcf.svg "Repobeats analytics image")
+For general Meshtastic firmware development and device setup, see the [official documentation](https://meshtastic.org/docs/).

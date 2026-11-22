@@ -40,6 +40,7 @@ enum RxSource {
 /// We normally just use max 3 hops for sending reliable messages
 #define HOP_RELIABLE 3
 
+// Fork customization: reject excessive hop_start values in LOCAL_ONLY and KNOWN_ONLY modes.
 #define REBROADCAST_HOP_START_LIMIT 5
 
 // For old firmware or when falling back to flooding, there is no next-hop preference

@@ -558,6 +558,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     }
 #endif
 
+    // Stock uses the configured limit; this fork forces selected default-channel broadcasts to zero.
     if (isFromUs(p) && isBroadcast(p->to) && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
         channels.isDefaultChannel(p->channel) &&
         IS_ONE_OF(p->decoded.portnum, meshtastic_PortNum_AUDIO_APP, meshtastic_PortNum_DETECTION_SENSOR_APP,
@@ -566,6 +567,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
                   meshtastic_PortNum_POWERSTRESS_APP, meshtastic_PortNum_PRIVATE_APP)) {
         p->hop_limit = 0;
     }
+    // END FORK CUSTOMIZATION
 
     // If we are the original transmitter, set the hop limit with which we start
     if (isFromUs(p))
@@ -1584,6 +1586,7 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
         }
 #endif
 
+        // Stock has no >5 cap; this fork drops excessive-hop packets before local handling.
         const auto rebroadcastMode = config.device.rebroadcast_mode;
         if (!skipHandle && src == RX_SRC_RADIO && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
             p->hop_start > REBROADCAST_HOP_START_LIMIT &&
@@ -1597,6 +1600,7 @@ void Router::dispatchReceived(meshtastic_MeshPacket *p, RxSource src)
                 skipHandle = true;
             }
         }
+        // END FORK CUSTOMIZATION
 
         // Neighbor info module is disabled, ignore expensive neighbor info packets
         if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&

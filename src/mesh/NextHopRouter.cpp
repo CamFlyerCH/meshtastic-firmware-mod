@@ -250,6 +250,7 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
     }
 #endif
 
+    // Stock relays by mode; this fork suppresses selected-port relays in LOCAL_ONLY and KNOWN_ONLY.
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
         IS_ONE_OF(config.device.rebroadcast_mode, meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY,
                   meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY) &&
@@ -261,6 +262,7 @@ bool NextHopRouter::perhapsRebroadcast(const meshtastic_MeshPacket *p)
         Router::cancelSending(p->from, p->id);
         return false;
     }
+    // END FORK CUSTOMIZATION
 
     // Check if traffic management wants to exhaust this packet's hops
     bool exhaustHops = false;

@@ -54,6 +54,7 @@ flash.jlink
 rtt_*.txt
 idf_component.yml
 CMakeLists.txt
+.dummy
 /sdkconfig.*
 .dummy/*
 
